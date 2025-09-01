@@ -1,0 +1,27 @@
+{
+  "name": "starlight",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "scripts": {
+    "start": "bun index.ts",
+    "dev": "bun --watch index.ts",
+    "command": "bunx ./scripts/register-command.ts"
+  },
+  "bin": {
+    "register-commands": "./scripts/register-commands.ts"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.72",
+    "@langchain/langgraph": "^0.4.6",
+    "@langchain/openai": "^0.6.9",
+    "discord.js": "^14.22.1",
+    "langchain": "^0.3.31"
+  }
+}
