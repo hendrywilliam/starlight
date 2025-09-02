@@ -12,7 +12,8 @@
     "command": "bunx ./scripts/register-command.ts"
   },
   "bin": {
-    "register-commands": "./scripts/register-commands.ts"
+    "register-commands": "./scripts/register-commands.ts",
+    "store-local-document": "./scripts/store-local-document.ts"
   },
   "peerDependencies": {
     "typescript": "^5"

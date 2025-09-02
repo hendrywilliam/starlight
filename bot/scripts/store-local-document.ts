@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
-import path from "node:path";
+
 import fs from "node:fs";
+import path from "node:path";
+import { supabase } from "../src/lib/supabase";
+import { OpenAIEmbeddings } from "@langchain/openai";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { OpenAIEmbeddings } from "@langchain/openai";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-import { supabase } from "../src/lib/supabase";
 
 async function main() {
   try {
