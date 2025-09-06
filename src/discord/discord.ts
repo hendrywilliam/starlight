@@ -16,14 +16,17 @@ import { textSplitter } from "../lib/text-splitter";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { embeddings } from "../lib/embeddings";
 import { supabase } from "../lib/supabase";
+import type { VectorStore } from "@langchain/core/vectorstores";
+import type { Document } from "langchain/document";
 
 export class Discord {
   private client: ExtendedClient;
+  private vectorStore: VectorStore;
   public token: string;
   public version: string;
   public module: Map<string, Module>;
 
-  constructor(token: string, version: string) {
+  constructor(token: string, version: string, vectorStore: VectorStore) {
     this.version = version;
     const client = new Client({
       intents: [
@@ -39,6 +42,7 @@ export class Discord {
     this.client = client as ExtendedClient;
     this.token = token;
     this.module = new Map<string, Module>();
+    this.vectorStore = vectorStore;
   }
 
   public start() {
@@ -60,38 +64,83 @@ export class Discord {
       process.env.ALLOWED_THREAD_CHANNEL_ID as string
     ).split(",");
 
-    this.client.on(Events.ThreadCreate, async (thread) => {
-      if (!thread.isThread()) {
+    this.client.on(Events.ThreadCreate, async (threadPost) => {
+      if (!threadPost.isThread()) {
         return;
       }
-      if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
+      if (
+        threadPost.parentId &&
+        !ALLOWED_CHANNEL_IDS.includes(threadPost.parentId)
+      ) {
         return;
       }
-      const messages = (await thread.messages.fetch({ limit: 1 }))
+      const messages = (await threadPost.messages.fetch({ limit: 1 }))
         .values()
         .toArray();
       // Initial messages.
-      const parentMessage = messages[0]?.content || "No content";
-      const parentMessageId = messages[0]?.id;
-      const contents = await textSplitter.splitText(parentMessage);
-      const metadatas = contents.map((_, index) => {
+      const content = messages[0]?.content || "No content";
+      const messageId = messages[0]?.id;
+      const contents = await textSplitter.splitText(content);
+      const documents = contents.map((content, index) => {
         return {
-          id: `${parentMessageId}_chunk_${index}`,
-          parent_id: parentMessageId as string,
-        } satisfies DocumentChunkMetadata;
+          pageContent: content,
+          metadata: {
+            id: `${messageId}_chunk_${index}`,
+            parent_id: messageId!,
+            channel_id: threadPost.parentId ? threadPost.parentId : "",
+          },
+        } satisfies Document;
       });
-      await SupabaseVectorStore.fromTexts(contents, metadatas, embeddings, {
-        client: supabase,
-        tableName: "documents",
-        queryName: "match_documents",
+      await this.vectorStore.addDocuments(documents, {
+        ids: documents.map((document) => {
+          return document.metadata.parent_id;
+        }),
       });
       console.log("Documents have been added.");
     });
 
     this.client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
-      console.log("hi");
-      const a = await newMessage.fetch();
-      console.log(a);
+      try {
+        const fresh = await newMessage.fetch();
+        const threadPost = await fresh.channel.fetch();
+        if (!threadPost.isThread()) {
+          return;
+        }
+        // Parent ID refers to the channel ID where this post is held.
+        if (
+          threadPost.parentId &&
+          !ALLOWED_CHANNEL_IDS.includes(threadPost.parentId)
+        ) {
+          return;
+        }
+        console.log("Changes detected in message.");
+        const messageId = fresh.id;
+        const content = fresh.content;
+        const splitted = await textSplitter.splitText(content);
+        const documents = splitted.map((content, index) => {
+          return {
+            pageContent: content,
+            metadata: {
+              id: `${messageId}_chunk_${index}`,
+              parent_id: messageId,
+              channel_id: threadPost.parentId!,
+            } satisfies DocumentChunkMetadata,
+          } satisfies Document;
+        });
+        await this.vectorStore.delete({
+          ids: documents.map((document) => {
+            return document.metadata.parent_id;
+          }),
+        });
+        await this.vectorStore.addDocuments(documents, {
+          ids: documents.map((document) => {
+            return document.metadata.parent_id;
+          }),
+        });
+        console.log("Documents have been updated.");
+      } catch (error) {
+        console.error(error);
+      }
     });
 
     this.client.on(Events.ThreadUpdate, async (thread) => {
@@ -159,6 +208,8 @@ export class Discord {
       }
     });
   }
+
+  private _filterId() {}
 
   public addModule(moduleName: string, module: Module) {
     this.module.set(moduleName, module);

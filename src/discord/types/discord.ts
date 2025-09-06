@@ -10,4 +10,5 @@ export interface Module {
 export type DocumentChunkMetadata = {
   id: string | number;
   parent_id: string;
+  channel_id: string;
 };
