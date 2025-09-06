@@ -6,3 +6,8 @@ export type ExtendedClient = Client & { commands: Collection<string, Command> };
 export interface Module {
   execute(data: unknown, ...args: any[]): any;
 }
+
+export type DocumentChunkMetadata = {
+  id: string | number;
+  parent_id: string;
+};

@@ -7,7 +7,15 @@ import {
 } from "discord.js";
 import fs from "node:fs";
 import path from "node:path";
-import type { ExtendedClient, Module } from "./types/discord";
+import type {
+  ExtendedClient,
+  Module,
+  DocumentChunkMetadata,
+} from "./types/discord";
+import { textSplitter } from "../lib/text-splitter";
+import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
+import { embeddings } from "../lib/embeddings";
+import { supabase } from "../lib/supabase";
 
 export class Discord {
   private client: ExtendedClient;
@@ -48,6 +56,80 @@ export class Discord {
   }
 
   private _listen() {
+    const ALLOWED_CHANNEL_IDS = (
+      process.env.ALLOWED_THREAD_CHANNEL_ID as string
+    ).split(",");
+
+    this.client.on(Events.ThreadCreate, async (thread) => {
+      if (!thread.isThread()) {
+        return;
+      }
+      if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
+        return;
+      }
+      const messages = (await thread.messages.fetch({ limit: 1 }))
+        .values()
+        .toArray();
+      // Initial messages.
+      const parentMessage = messages[0]?.content || "No content";
+      const parentMessageId = messages[0]?.id;
+      const contents = await textSplitter.splitText(parentMessage);
+      const metadatas = contents.map((_, index) => {
+        return {
+          id: `${parentMessageId}_chunk_${index}`,
+          parent_id: parentMessageId as string,
+        } satisfies DocumentChunkMetadata;
+      });
+      await SupabaseVectorStore.fromTexts(contents, metadatas, embeddings, {
+        client: supabase,
+        tableName: "documents",
+        queryName: "match_documents",
+      });
+      console.log("Documents have been added.");
+    });
+
+    this.client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
+      console.log("hi");
+      const a = await newMessage.fetch();
+      console.log(a);
+    });
+
+    this.client.on(Events.ThreadUpdate, async (thread) => {
+      if (!thread.isThread()) {
+        return;
+      }
+      if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
+        return;
+      }
+      const messages = (await thread.messages.fetch({ limit: 10 }))
+        .values()
+        .toArray();
+      // Batch processing
+      const [documents] = await Promise.all(
+        messages.map(async (message, index) => {
+          const parentId = message.id;
+          const chunks = await textSplitter.splitText(message?.content || "");
+          return {
+            chunks,
+            metadatas: {
+              id: `${parentId}_chunk_${index}`,
+              parent_id: message.id,
+            },
+          };
+        })
+      );
+      await SupabaseVectorStore.fromTexts(
+        documents?.chunks || [],
+        documents?.metadatas || [],
+        embeddings,
+        {
+          client: supabase,
+          tableName: "documents",
+          queryName: "match_documents",
+        }
+      );
+      console.log("Documents have been updated.");
+    });
     this.client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isChatInputCommand()) {
         return;
@@ -63,7 +145,6 @@ export class Discord {
       try {
         await command?.execute(interaction, this.module);
       } catch (error) {
-        console.error(error);
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
             content: "There was an error while executing this command!",

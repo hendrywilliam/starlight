@@ -53,7 +53,6 @@ export class KnowledgeBaseModule {
       const docsContent = state.context
         .map((document) => (document as Document).pageContent)
         .join();
-      console.log(docsContent);
 
       const messages = await promptTemplate.invoke({
         question: state.question,
