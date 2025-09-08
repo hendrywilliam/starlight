@@ -4,8 +4,8 @@ import { Annotation, StateGraph } from "@langchain/langgraph";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { VectorStore } from "@langchain/core/vectorstores";
-import type { Document } from "langchain/document";
 import type { Module } from "../../discord/types/discord";
+import type { Document } from "langchain/document";
 
 const StateAnnotation = Annotation.Root({
   question: Annotation<string>,

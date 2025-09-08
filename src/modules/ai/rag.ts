@@ -1,7 +1,4 @@
-import type {
-  VectorStore,
-  VectorStoreRetrieverInput,
-} from "@langchain/core/vectorstores";
+import type { VectorStore } from "@langchain/core/vectorstores";
 import type { Module } from "../../discord/types/discord";
 import type { Embeddings } from "@langchain/core/embeddings";
 import type { TextSplitter } from "langchain/text_splitter";
