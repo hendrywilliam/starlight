@@ -13,20 +13,23 @@ import type {
   DocumentChunkMetadata,
 } from "./types/discord";
 import { textSplitter } from "../lib/text-splitter";
-import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
+import {
+  SupabaseVectorStore,
+  type SupabaseFilter,
+  type SupabaseFilterRPCCall,
+} from "@langchain/community/vectorstores/supabase";
 import { embeddings } from "../lib/embeddings";
 import { supabase } from "../lib/supabase";
-import type { VectorStore } from "@langchain/core/vectorstores";
 import type { Document } from "langchain/document";
+import type { RAGModule } from "../modules/ai/rag";
 
 export class Discord {
   private client: ExtendedClient;
-  private vectorStore: VectorStore;
   public token: string;
   public version: string;
   public module: Map<string, Module>;
 
-  constructor(token: string, version: string, vectorStore: VectorStore) {
+  constructor(token: string, version: string) {
     this.version = version;
     const client = new Client({
       intents: [
@@ -42,7 +45,6 @@ export class Discord {
     this.client = client as ExtendedClient;
     this.token = token;
     this.module = new Map<string, Module>();
-    this.vectorStore = vectorStore;
   }
 
   public start() {
@@ -77,10 +79,15 @@ export class Discord {
       const messages = (await threadPost.messages.fetch({ limit: 1 }))
         .values()
         .toArray();
+
+      const ragModule = this.module.get("rag") as RAGModule | undefined;
+      if (!ragModule) {
+        return;
+      }
       // Initial messages.
       const content = messages[0]?.content || "No content";
       const messageId = messages[0]?.id;
-      const contents = await textSplitter.splitText(content);
+      const contents = await ragModule.splitText(content);
       const documents = contents.map((content, index) => {
         return {
           pageContent: content,
@@ -91,12 +98,36 @@ export class Discord {
           },
         } satisfies Document;
       });
-      await this.vectorStore.addDocuments(documents, {
+      await ragModule.addDocuments(documents, {
         ids: documents.map((document) => {
           return document.metadata.parent_id;
         }),
       });
       console.log("Documents have been added.");
+    });
+
+    this.client.on(Events.ThreadDelete, async (thread) => {
+      try {
+        if (!thread.isThread()) {
+          return;
+        }
+        if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
+          return;
+        }
+        const ragModule = this.module.get("rag") as RAGModule | undefined;
+        if (!ragModule) {
+          return;
+        }
+        const { error } = await ragModule.db
+          .from("documents")
+          .delete()
+          .eq("metadata->>parent_id", thread.id);
+        if (error) {
+          throw new Error(error.message || "Something went wrong");
+        }
+      } catch (error) {
+        console.error(error);
+      }
     });
 
     this.client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
@@ -106,7 +137,6 @@ export class Discord {
         if (!threadPost.isThread()) {
           return;
         }
-        // Parent ID refers to the channel ID where this post is held.
         if (
           threadPost.parentId &&
           !ALLOWED_CHANNEL_IDS.includes(threadPost.parentId)
@@ -114,9 +144,13 @@ export class Discord {
           return;
         }
         console.log("Changes detected in message.");
+        const ragModule = this.module.get("rag") as RAGModule | undefined;
+        if (!ragModule) {
+          return;
+        }
         const messageId = fresh.id;
         const content = fresh.content;
-        const splitted = await textSplitter.splitText(content);
+        const splitted = await ragModule.splitText(content);
         const documents = splitted.map((content, index) => {
           return {
             pageContent: content,
@@ -127,12 +161,13 @@ export class Discord {
             } satisfies DocumentChunkMetadata,
           } satisfies Document;
         });
-        await this.vectorStore.delete({
+
+        await ragModule.deleteDocuments({
           ids: documents.map((document) => {
             return document.metadata.parent_id;
           }),
         });
-        await this.vectorStore.addDocuments(documents, {
+        await ragModule.addDocuments(documents, {
           ids: documents.map((document) => {
             return document.metadata.parent_id;
           }),
@@ -208,8 +243,6 @@ export class Discord {
       }
     });
   }
-
-  private _filterId() {}
 
   public addModule(moduleName: string, module: Module) {
     this.module.set(moduleName, module);

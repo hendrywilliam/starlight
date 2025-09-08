@@ -5,6 +5,7 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { VectorStore } from "@langchain/core/vectorstores";
 import type { Document } from "langchain/document";
+import type { Module } from "../../discord/types/discord";
 
 const StateAnnotation = Annotation.Root({
   question: Annotation<string>,
@@ -16,7 +17,7 @@ const InputStateAnnotation = Annotation.Root({
   question: Annotation<string>,
 });
 
-export class KnowledgeBaseModule {
+export class KnowledgeBaseModule implements Module {
   model: BaseChatModel;
   vectorStore: VectorStore;
   graph: StateGraph<typeof StateAnnotation.State>;
