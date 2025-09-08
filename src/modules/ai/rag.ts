@@ -58,6 +58,10 @@ export class RAGModule implements Module {
     return await this.vectorStore.asRetriever(...args);
   }
 
+  public async embedQuery(document: string) {
+    return await this.embedding.embedQuery(document);
+  }
+
   public async deleteDocuments(params?: Record<string, any>) {
     return await this.vectorStore.delete(params);
   }

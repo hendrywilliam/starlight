@@ -13,11 +13,7 @@ import type {
   DocumentChunkMetadata,
 } from "./types/discord";
 import { textSplitter } from "../lib/text-splitter";
-import {
-  SupabaseVectorStore,
-  type SupabaseFilter,
-  type SupabaseFilterRPCCall,
-} from "@langchain/community/vectorstores/supabase";
+import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { embeddings } from "../lib/embeddings";
 import { supabase } from "../lib/supabase";
 import type { Document } from "langchain/document";
@@ -84,7 +80,7 @@ export class Discord {
       if (!ragModule) {
         return;
       }
-      // Initial messages.
+
       const content = messages[0]?.content || "No content";
       const messageId = messages[0]?.id;
       const contents = await ragModule.splitText(content);
@@ -98,11 +94,7 @@ export class Discord {
           },
         } satisfies Document;
       });
-      await ragModule.addDocuments(documents, {
-        ids: documents.map((document) => {
-          return document.metadata.parent_id;
-        }),
-      });
+      await ragModule.addDocuments(documents);
       console.log("Documents have been added.");
     });
 
@@ -130,7 +122,7 @@ export class Discord {
       }
     });
 
-    this.client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
+    this.client.on(Events.MessageUpdate, async (_, newMessage) => {
       try {
         const fresh = await newMessage.fetch();
         const threadPost = await fresh.channel.fetch();
@@ -151,27 +143,24 @@ export class Discord {
         const messageId = fresh.id;
         const content = fresh.content;
         const splitted = await ragModule.splitText(content);
-        const documents = splitted.map((content, index) => {
-          return {
-            pageContent: content,
-            metadata: {
-              id: `${messageId}_chunk_${index}`,
-              parent_id: messageId,
-              channel_id: threadPost.parentId!,
-            } satisfies DocumentChunkMetadata,
-          } satisfies Document;
-        });
-
-        await ragModule.deleteDocuments({
-          ids: documents.map((document) => {
-            return document.metadata.parent_id;
-          }),
-        });
-        await ragModule.addDocuments(documents, {
-          ids: documents.map((document) => {
-            return document.metadata.parent_id;
-          }),
-        });
+        const rows = await Promise.all(
+          splitted.map(async (item, index) => {
+            const vectorFromQuery = await ragModule.embedQuery(item);
+            return {
+              content: item,
+              metadata: {
+                id: `${messageId}_chunk_${index}`,
+                parent_id: messageId,
+                channel_id: threadPost.parentId!,
+              } satisfies DocumentChunkMetadata,
+              embedding: vectorFromQuery,
+            };
+          })
+        );
+        await ragModule.db
+          .from("documents")
+          .update(rows)
+          .eq("metadata->>parent_id", messageId.toString());
         console.log("Documents have been updated.");
       } catch (error) {
         console.error(error);
