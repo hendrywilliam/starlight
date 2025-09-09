@@ -238,8 +238,12 @@ export class Discord {
     return this;
   }
 
+  public async shutdown() {
+    return await this.client.destroy();
+  }
+
   private async _register() {
-    const commandsPath = path.join(__dirname, "commands");
+    const commandsPath = path.join(process.cwd(), "src", "discord", "commands");
     const commandsFolders = fs.readdirSync(commandsPath);
     for (const file of commandsFolders) {
       const commandPath = path.join(commandsPath, file);

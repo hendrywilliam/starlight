@@ -18,5 +18,15 @@ async function main() {
       new RAGModule(embeddings, vectorStore, textSplitter, supabase)
     )
     .start();
+
+  process.on("SIGTERM", async () => {
+    await discord.shutdown();
+    process.exit(0);
+  });
+
+  process.on("SIGINT", async () => {
+    await discord.shutdown();
+    process.exit(0);
+  });
 }
 main();

@@ -9,6 +9,7 @@
   "scripts": {
     "start": "bun index.ts",
     "dev": "bun --watch index.ts",
+    "build": "bun build ./index.ts --outdir ./dist",
     "command": "bunx ./scripts/register-command.ts"
   },
   "bin": {
