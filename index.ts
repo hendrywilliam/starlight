@@ -5,6 +5,7 @@ import { embeddings } from "./src/lib/embeddings";
 import { vectorStore } from "./src/lib/vector-store";
 import { textSplitter } from "./src/lib/text-splitter";
 import { supabase } from "./src/lib/supabase";
+import { PermissionManager } from "./src/modules/permission-manager";
 
 async function main() {
   const discord = new Discord(
@@ -16,6 +17,13 @@ async function main() {
     .addModule(
       "rag",
       new RAGModule(embeddings, vectorStore, textSplitter, supabase)
+    )
+    .addModule(
+      "permission",
+      new PermissionManager({
+        privilegedCommands: process.env.PRIVILEGED_COMMANDS?.split(",") || [],
+        privilegedRoles: process.env.ALLOWED_MEMBER_ROLE_ID?.split(",") || [],
+      })
     )
     .start();
 

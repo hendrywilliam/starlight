@@ -1,9 +1,11 @@
 import {
+  ChatInputCommandInteraction,
   Client,
   Collection,
   Events,
   GatewayIntentBits,
-  MessageFlags,
+  GuildMember,
+  type CacheType,
 } from "discord.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +20,7 @@ import { embeddings } from "../lib/embeddings";
 import { supabase } from "../lib/supabase";
 import type { Document } from "langchain/document";
 import type { RAGModule } from "../modules/ai/rag";
+import { PermissionManager } from "../modules/permission-manager";
 
 export class Discord {
   private client: ExtendedClient;
@@ -58,18 +61,8 @@ export class Discord {
   }
 
   private _listen() {
-    const ALLOWED_CHANNEL_IDS = (
-      process.env.ALLOWED_THREAD_CHANNEL_ID as string
-    ).split(",");
-
     this.client.on(Events.ThreadCreate, async (threadPost) => {
       if (!threadPost.isThread()) {
-        return;
-      }
-      if (
-        threadPost.parentId &&
-        !ALLOWED_CHANNEL_IDS.includes(threadPost.parentId)
-      ) {
         return;
       }
       const messages = (await threadPost.messages.fetch({ limit: 1 }))
@@ -78,9 +71,8 @@ export class Discord {
 
       const ragModule = this.module.get("rag") as RAGModule | undefined;
       if (!ragModule) {
-        return;
+        throw new Error("Something went wrong.");
       }
-
       const content = messages[0]?.content || "No content";
       const messageId = messages[0]?.id;
       const contents = await ragModule.splitText(content);
@@ -101,9 +93,6 @@ export class Discord {
     this.client.on(Events.ThreadDelete, async (thread) => {
       try {
         if (!thread.isThread()) {
-          return;
-        }
-        if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
           return;
         }
         const ragModule = this.module.get("rag") as RAGModule | undefined;
@@ -127,12 +116,6 @@ export class Discord {
         const fresh = await newMessage.fetch();
         const threadPost = await fresh.channel.fetch();
         if (!threadPost.isThread()) {
-          return;
-        }
-        if (
-          threadPost.parentId &&
-          !ALLOWED_CHANNEL_IDS.includes(threadPost.parentId)
-        ) {
           return;
         }
         console.log("Changes detected in message.");
@@ -171,9 +154,6 @@ export class Discord {
       if (!thread.isThread()) {
         return;
       }
-      if (thread.parentId && !ALLOWED_CHANNEL_IDS.includes(thread.parentId)) {
-        return;
-      }
       const messages = (await thread.messages.fetch({ limit: 10 }))
         .values()
         .toArray();
@@ -205,30 +185,47 @@ export class Discord {
     });
     this.client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isChatInputCommand()) {
-        return;
-      }
-      const command = (interaction.client as ExtendedClient).commands.get(
-        interaction.commandName
-      );
-      if (!command) {
-        throw new Error(
-          `No command matching ${interaction.commandName} was found.`
-        );
+        throw new Error("There was an error while executing this command.");
       }
       try {
+        const command = (interaction.client as ExtendedClient).commands.get(
+          interaction.commandName
+        );
+        if (!command) {
+          throw new Error(
+            `No command matching ${interaction.commandName} was found.`
+          );
+        }
+        const permission = this.module.get("permission") as
+          | PermissionManager
+          | undefined;
+        if (!permission) {
+          throw new Error("You are not allowed to use this command.");
+        }
+        if (
+          !permission.hasPermission(
+            interaction.member as GuildMember,
+            interaction.commandName
+          )
+        ) {
+          throw new Error("You are not allowed to use this command.");
+        }
         await command?.execute(interaction, this.module);
       } catch (error) {
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: "There was an error while executing this command!",
-            flags: MessageFlags.Ephemeral,
-          });
-        } else {
-          await interaction.reply({
-            content: "There was an error while executing this command!",
-            flags: MessageFlags.Ephemeral,
+          return await interaction.editReply({
+            content:
+              error instanceof Error
+                ? error.message
+                : "There was an error while executing this command.",
           });
         }
+        return await interaction.reply({
+          content:
+            error instanceof Error
+              ? error.message
+              : "There was an error while executing this command.",
+        });
       }
     });
   }
