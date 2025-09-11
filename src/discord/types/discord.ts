@@ -11,4 +11,7 @@ export type DocumentChunkMetadata = {
   id: string | number;
   parent_id: string;
   channel_id: string;
+  is_attachment?: boolean;
+  attachment_id?: string;
+  attachment_name?: string;
 };
