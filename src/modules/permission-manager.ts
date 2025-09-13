@@ -1,9 +1,10 @@
-import { GuildMember, type APIInteractionGuildMember } from "discord.js";
+import { GuildMember, type Channel } from "discord.js";
 import type { Module } from "../discord/types/discord";
 
 type PermissionConfig = {
   privilegedRoles: string[];
   privilegedCommands: string[];
+  allowedChannels: string[];
 };
 
 export class PermissionManager implements Module {
@@ -25,6 +26,13 @@ export class PermissionManager implements Module {
 
   public isPrivilegedRole(roles: string[]) {
     return this.config.privilegedRoles.some((role) => roles.includes(role));
+  }
+
+  public isAllowedChannel(channelId: string | undefined) {
+    if (!channelId) return false;
+    return this.config.allowedChannels.some(
+      (_channel) => _channel === channelId
+    );
   }
 
   public execute(): void {

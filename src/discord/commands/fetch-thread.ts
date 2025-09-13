@@ -19,7 +19,6 @@ export default {
         .setDescription("Thread/message as source of truth.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
-        .addChannelTypes(ChannelType.GuildText)
         .setRequired(true);
       return option;
     }),
@@ -82,7 +81,9 @@ export default {
     );
     // Get attachments.
     for (const attachment of message.attachments.values()) {
-      const mimeType = attachment.contentType?.split(";")[0];
+      const mimeType = attachment.contentType
+        ? attachment.contentType.split(";")[0]
+        : "";
       if (mimeType === "text/plain") {
         try {
           const response = await fetch(attachment.url, {

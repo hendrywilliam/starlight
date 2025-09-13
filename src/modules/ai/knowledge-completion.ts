@@ -6,6 +6,7 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import type { VectorStore } from "@langchain/core/vectorstores";
 import type { Module } from "../../discord/types/discord";
 import type { Document } from "langchain/document";
+import type { Logger } from "winston";
 
 const StateAnnotation = Annotation.Root({
   question: Annotation<string>,
@@ -18,17 +19,19 @@ const InputStateAnnotation = Annotation.Root({
 });
 
 export class KnowledgeBaseModule implements Module {
-  model: BaseChatModel;
-  vectorStore: VectorStore;
-  graph: StateGraph<typeof StateAnnotation.State>;
+  private model: BaseChatModel;
+  private graph: StateGraph<typeof StateAnnotation.State>;
+  public vectorStore: VectorStore;
+  public logger: Logger;
 
-  constructor(vectorStore: VectorStore) {
+  constructor(vectorStore: VectorStore, logger: Logger) {
     this.model = new ChatOpenAI({
       model: "gpt-4o-mini",
       temperature: 0,
       apiKey: process.env.OPENAI_API_KEY,
     });
     this.vectorStore = vectorStore;
+    this.logger = logger;
 
     // @ts-ignore
     this.graph = new StateGraph(StateAnnotation)

@@ -1,11 +1,9 @@
 import {
-  ChatInputCommandInteraction,
   Client,
   Collection,
   Events,
   GatewayIntentBits,
   GuildMember,
-  type CacheType,
 } from "discord.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,21 +12,18 @@ import type {
   Module,
   DocumentChunkMetadata,
 } from "./types/discord";
-import { textSplitter } from "../lib/text-splitter";
-import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-import { embeddings } from "../lib/embeddings";
-import { supabase } from "../lib/supabase";
-import type { Document } from "langchain/document";
 import type { RAGModule } from "../modules/ai/rag";
 import { PermissionManager } from "../modules/permission-manager";
+import type { Logger } from "winston";
 
 export class Discord {
   private client: ExtendedClient;
   public token: string;
   public version: string;
   public module: Map<string, Module>;
+  public logger: Logger;
 
-  constructor(token: string, version: string) {
+  constructor(token: string, version: string, logger: Logger) {
     this.version = version;
     const client = new Client({
       intents: [
@@ -44,6 +39,7 @@ export class Discord {
     this.client = client as ExtendedClient;
     this.token = token;
     this.module = new Map<string, Module>();
+    this.logger = logger;
   }
 
   public start() {
@@ -54,40 +50,94 @@ export class Discord {
 
   private _login() {
     this.client.once(Events.ClientReady, (client) => {
-      console.log(`Ready! Logged in as ${client.user.tag}`);
+      this.logger.info(`logged in as ${client.user.tag}`);
     });
     this.client.login(this.token);
     this._listen();
   }
 
   private _listen() {
-    this.client.on(Events.ThreadCreate, async (threadPost) => {
-      if (!threadPost.isThread()) {
+    this.client.on(Events.ThreadCreate, async (thread) => {
+      if (!thread.isThread()) {
         return;
       }
-      const messages = (await threadPost.messages.fetch({ limit: 1 }))
+      const permission = this.module.get("permission") as
+        | PermissionManager
+        | undefined;
+      if (!permission || !permission.isAllowedChannel(thread.parentId!)) {
+        return;
+      }
+      const messages = (await thread.messages.fetch({ limit: 1 }))
         .values()
         .toArray();
-
       const ragModule = this.module.get("rag") as RAGModule | undefined;
       if (!ragModule) {
+        this.logger.error("cant find selected module: RAG");
         throw new Error("Something went wrong.");
       }
-      const content = messages[0]?.content || "No content";
-      const messageId = messages[0]?.id;
-      const contents = await ragModule.splitText(content);
-      const documents = contents.map((content, index) => {
-        return {
-          pageContent: content,
-          metadata: {
-            id: `${messageId}_chunk_${index}`,
-            parent_id: messageId!,
-            channel_id: threadPost.parentId ? threadPost.parentId : "",
-          },
-        } satisfies Document;
-      });
-      await ragModule.addDocuments(documents);
-      console.log("Documents have been added.");
+      const message = messages[0];
+      if (!message) {
+        this.logger.error(
+          `cant find a message from thread with id: ${thread.id} `
+        );
+        throw new Error("No message found.");
+      }
+      const contents = await ragModule.splitText(message.content);
+      const rows = await Promise.all(
+        contents.map(async (item, index) => {
+          const vectorFromQuery = await ragModule.embedQuery(item);
+          return {
+            content: item,
+            metadata: {
+              id: `${message.id}_chunk_${index}`,
+              parent_id: message.id,
+              channel_id: thread.parentId ? thread.parentId : "",
+            } satisfies DocumentChunkMetadata,
+            embedding: vectorFromQuery,
+          };
+        })
+      );
+      for (const attachment of message.attachments.values()) {
+        const mimeType = attachment.contentType
+          ? attachment.contentType.split(";")[0]
+          : "";
+        if (mimeType === "text/plain") {
+          try {
+            const response = await fetch(attachment.url, {
+              method: "GET",
+            });
+            const textContent = await response.text();
+            const attachmentContents = await ragModule.splitText(textContent);
+            const attachmentRows = await Promise.all(
+              attachmentContents.map(async (item, index) => {
+                const vectorFromQuery = await ragModule.embedQuery(item);
+                return {
+                  content: item,
+                  metadata: {
+                    channel_id: thread.parentId ? thread.parentId : "",
+                    id: `${message.id}_chunk_${index}`,
+                    parent_id: message.id,
+                    is_attachment: true,
+                    attachment_id: attachment.id,
+                    attachment_name: attachment.name,
+                  } satisfies DocumentChunkMetadata,
+                  embedding: vectorFromQuery,
+                };
+              })
+            );
+            rows.push(...attachmentRows);
+          } catch (error) {
+            this.logger.error(
+              `error while processing thread/message attachments ${attachment.id}:`,
+              error
+            );
+          }
+        }
+      }
+      await ragModule.db.from("documents").insert(rows);
+      this.logger.info(
+        `document chunks from message: ${message.id} has been added.`
+      );
     });
 
     this.client.on(Events.ThreadDelete, async (thread) => {
@@ -95,8 +145,15 @@ export class Discord {
         if (!thread.isThread()) {
           return;
         }
+        const permission = this.module.get("permission") as
+          | PermissionManager
+          | undefined;
+        if (!permission || !permission.isAllowedChannel(thread.parentId!)) {
+          return;
+        }
         const ragModule = this.module.get("rag") as RAGModule | undefined;
         if (!ragModule) {
+          this.logger.error("cant find selected module: RAG");
           return;
         }
         const { error } = await ragModule.db
@@ -106,8 +163,14 @@ export class Discord {
         if (error) {
           throw new Error(error.message || "Something went wrong");
         }
+        this.logger.info(
+          `document chunks from thread: ${thread.id} have been deleted.`
+        );
       } catch (error) {
-        console.error(error);
+        this.logger.error(
+          `cant delete a thread with id: ${thread.id}: `,
+          error
+        );
       }
     });
 
@@ -118,7 +181,7 @@ export class Discord {
         if (!threadPost.isThread()) {
           return;
         }
-        console.log("Changes detected in message.");
+        this.logger.info(`changes detected in message with id: ${fresh.id}.`);
         const ragModule = this.module.get("rag") as RAGModule | undefined;
         if (!ragModule) {
           return;
@@ -144,47 +207,19 @@ export class Discord {
           .from("documents")
           .update(rows)
           .eq("metadata->>parent_id", messageId.toString());
-        console.log("Documents have been updated.");
+        this.logger.info(
+          `document chunks from message id: ${fresh.id} have been updated.`
+        );
       } catch (error) {
-        console.error(error);
+        this.logger.error(error);
       }
     });
 
-    this.client.on(Events.ThreadUpdate, async (thread) => {
-      if (!thread.isThread()) {
-        return;
-      }
-      const messages = (await thread.messages.fetch({ limit: 10 }))
-        .values()
-        .toArray();
-      // Batch processing
-      const [documents] = await Promise.all(
-        messages.map(async (message, index) => {
-          const parentId = message.id;
-          const chunks = await textSplitter.splitText(message?.content || "");
-          return {
-            chunks,
-            metadatas: {
-              id: `${parentId}_chunk_${index}`,
-              parent_id: message.id,
-            },
-          };
-        })
-      );
-      await SupabaseVectorStore.fromTexts(
-        documents?.chunks || [],
-        documents?.metadatas || [],
-        embeddings,
-        {
-          client: supabase,
-          tableName: "documents",
-          queryName: "match_documents",
-        }
-      );
-      console.log("Documents have been updated.");
-    });
     this.client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isChatInputCommand()) {
+        this.logger.error(
+          `unexpected type of interaction, expected: ChatInputCommandInteraction, received: ${interaction.type}`
+        );
         throw new Error("There was an error while executing this command.");
       }
       try {
@@ -192,6 +227,9 @@ export class Discord {
           interaction.commandName
         );
         if (!command) {
+          this.logger.error(
+            `no command matching ${interaction.command} was found.`
+          );
           throw new Error(
             `No command matching ${interaction.commandName} was found.`
           );
@@ -212,19 +250,18 @@ export class Discord {
         }
         await command?.execute(interaction, this.module);
       } catch (error) {
+        const _error =
+          error instanceof Error
+            ? error.message
+            : "There was an error while executing this command.";
+        this.logger.error(_error, error);
         if (interaction.replied || interaction.deferred) {
           return await interaction.editReply({
-            content:
-              error instanceof Error
-                ? error.message
-                : "There was an error while executing this command.",
+            content: _error,
           });
         }
         return await interaction.reply({
-          content:
-            error instanceof Error
-              ? error.message
-              : "There was an error while executing this command.",
+          content: _error,
         });
       }
     });
@@ -232,6 +269,7 @@ export class Discord {
 
   public addModule(moduleName: string, module: Module) {
     this.module.set(moduleName, module);
+    this.logger.info(`module: ${moduleName} assigned.`);
     return this;
   }
 
