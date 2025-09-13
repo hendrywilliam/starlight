@@ -52,7 +52,7 @@ check_docker() {
   return 0
 }
 
-build_starlight () {
+build_starlight() {
   log_info "Building starlight image..."
 
   cd "$PROJECT_ROOT"
@@ -71,8 +71,24 @@ build_starlight () {
   fi
 }
 
+clean_all() {
+  log_info "Cleaning process started..."
+
+  log_info "Checking all containers related..."
+  docker stop $(docker ps -q --filter "ancestor=starlight:latest" 2>/dev/null) 2>/dev/null || true
+
+  log_info "Removing all containers related..."
+  docker rm $(docker ps -aq --filter "ancestor=starlight:latest" 2>/dev/null) 2>/dev/null || true
+
+  log_info "Removing images..."
+  docker rmi starlight:latest 2>/dev/null || true
+
+  log_success "Cleaning process completed..."
+  return 0
+}
+
 STARLIGHT_IMAGE=false
-CLEAN_IMAGE=false
+CLEAN_ALL_IMAGES=false
 
 while [ "$1" != "" ]; do
   case $1 in
@@ -81,6 +97,9 @@ while [ "$1" != "" ]; do
       ;;
     -s | --starlight )
       STARLIGHT_IMAGE=true
+      ;;
+    -c | --clean )
+      CLEAN_ALL_IMAGES=true
       ;;
     * )
       log_error "Unrecognized command: $1"
@@ -94,6 +113,11 @@ check_docker
  
 if [ "$STARLIGHT_IMAGE" = true ]; then
   build_starlight
+  exit $?
+fi
+
+if [ "$CLEAN_ALL_IMAGES" = true ]; then
+  clean_all
   exit $?
 fi
 
