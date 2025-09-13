@@ -27,5 +27,6 @@ COPY --from=prerelease /usr/src/app/src ./src
 COPY --from=prerelease /usr/src/app/dist/index.js .
 COPY --from=prerelease /usr/src/app/dist/index.js.map .
 
+RUN mkdir ./.log && chown bun:bun ./.log
 USER bun
 ENTRYPOINT [ "bun", "index.js" ]
