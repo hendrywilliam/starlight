@@ -5,7 +5,7 @@ import { embeddings } from "./src/lib/embeddings";
 import { vectorStore } from "./src/lib/vector-store";
 import { textSplitter } from "./src/lib/text-splitter";
 import { supabase } from "./src/lib/supabase";
-import { PermissionManager } from "./src/modules/permission-manager";
+import { PermissionManagerModule } from "./src/modules/permission-manager";
 import { logger } from "./src/lib/logger";
 
 async function main() {
@@ -22,10 +22,11 @@ async function main() {
     )
     .addModule(
       "permission",
-      new PermissionManager({
+      new PermissionManagerModule({
         privilegedCommands: process.env.PRIVILEGED_COMMANDS?.split(",") || [],
         privilegedRoles: process.env.ALLOWED_MEMBER_ROLE_ID?.split(",") || [],
         allowedChannels: process.env.ALLOWED_CHANNELS_ID?.split(",") || [],
+        chatChannels: process.env.CHAT_AI_CHANNEL?.split(",") || [],
       })
     )
     .start();

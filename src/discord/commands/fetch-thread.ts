@@ -7,16 +7,15 @@ import {
 } from "discord.js";
 import type { DocumentChunkMetadata, Module } from "../types/discord";
 import type { RAGModule } from "../../modules/ai/rag";
-import type { PermissionManager } from "../../modules/permission-manager";
 
 export default {
   data: new SlashCommandBuilder()
     .setName("fetch")
-    .setDescription("Fetch a thread and feed it to database.")
+    .setDescription("Fetch a message and feed it to database.")
     .addChannelOption((option) => {
       option
-        .setName("thread")
-        .setDescription("Thread/message as source of truth.")
+        .setName("source")
+        .setDescription("Forum/messages as source of truth.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
         .setRequired(true);
@@ -41,21 +40,7 @@ export default {
       );
     }
     const channelId = actualChannel.parentId as string;
-    const permissionManager = module.get("permission") as
-      | PermissionManager
-      | undefined;
-    if (!permissionManager) {
-      throw new Error("Something went wrong.");
-    }
-    const allowed = permissionManager.hasPermission(
-      interaction.member as GuildMember,
-      interaction.commandName
-    );
-    if (!allowed) {
-      throw new Error("You are not allowed to use this command.");
-    }
     const messages = await actualChannel.messages.fetch();
-    // NOTE: Latest message is first message.
     const message = messages.last();
     if (!message) {
       throw new Error("Failed to get first message from selected thread.");

@@ -13,7 +13,7 @@ import type {
   DocumentChunkMetadata,
 } from "./types/discord";
 import type { RAGModule } from "../modules/ai/rag";
-import { PermissionManager } from "../modules/permission-manager";
+import { PermissionManagerModule } from "../modules/permission-manager";
 import type { Logger } from "winston";
 
 export class Discord {
@@ -62,7 +62,7 @@ export class Discord {
         return;
       }
       const permission = this.module.get("permission") as
-        | PermissionManager
+        | PermissionManagerModule
         | undefined;
       if (!permission || !permission.isAllowedChannel(thread.parentId!)) {
         return;
@@ -146,7 +146,7 @@ export class Discord {
           return;
         }
         const permission = this.module.get("permission") as
-          | PermissionManager
+          | PermissionManagerModule
           | undefined;
         if (!permission || !permission.isAllowedChannel(thread.parentId!)) {
           return;
@@ -228,27 +228,25 @@ export class Discord {
         );
         if (!command) {
           this.logger.error(
-            `no command matching ${interaction.command} was found.`
+            `no command matching ${interaction.commandName} was found.`
           );
           throw new Error(
             `No command matching ${interaction.commandName} was found.`
           );
         }
         const permission = this.module.get("permission") as
-          | PermissionManager
+          | PermissionManagerModule
           | undefined;
-        if (!permission) {
+        if (!permission)
           throw new Error("You are not allowed to use this command.");
-        }
         if (
           !permission.hasPermission(
             interaction.member as GuildMember,
             interaction.commandName
           )
-        ) {
+        )
           throw new Error("You are not allowed to use this command.");
-        }
-        await command?.execute(interaction, this.module);
+        await command?.execute(interaction, this.module, this.logger);
       } catch (error) {
         const _error =
           error instanceof Error

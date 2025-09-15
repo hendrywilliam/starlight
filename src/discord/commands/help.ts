@@ -11,11 +11,14 @@ export default {
   async execute(interaction: ChatInputCommandInteraction<CacheType>) {
     await interaction.reply(
       `
-### List all commands
+### All commands.
 1. \`\`\/ask\`\` - Ask AI a question.
       
 ### Privileged commands.
-1. \`\`\/fetch\`\` - Fetch a thread and feed it to database.`
+1. \`\`\/fetch\`\` - Fetch a message and feed it to database.
+2. \`\`\/setup\`\` - Setup guild information.
+3. \`\`\/update\`\` - Update guild information.
+  `
     );
   },
 };

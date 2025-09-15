@@ -5,9 +5,10 @@ type PermissionConfig = {
   privilegedRoles: string[];
   privilegedCommands: string[];
   allowedChannels: string[];
+  chatChannels: string[];
 };
 
-export class PermissionManager implements Module {
+export class PermissionManagerModule implements Module {
   public config: PermissionConfig;
 
   constructor(config: PermissionConfig) {
