@@ -248,18 +248,16 @@ export class Discord {
           throw new Error("You are not allowed to use this command.");
         await command?.execute(interaction, this.module, this.logger);
       } catch (error) {
-        const _error =
-          error instanceof Error
-            ? error.message
-            : "There was an error while executing this command.";
+        const errorMessage = "There was an error while executing this command.";
+        const _error = error instanceof Error ? error.message : errorMessage;
         this.logger.error(_error, error);
         if (interaction.replied || interaction.deferred) {
           return await interaction.editReply({
-            content: _error,
+            content: errorMessage,
           });
         }
         return await interaction.reply({
-          content: _error,
+          content: errorMessage,
         });
       }
     });

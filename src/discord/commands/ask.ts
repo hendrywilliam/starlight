@@ -1,6 +1,7 @@
 import {
   ChatInputCommandInteraction,
   GuildMember,
+  Message,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type CacheType,
@@ -9,6 +10,9 @@ import { InteractionContextType } from "discord.js";
 import type { RAGModule } from "../../modules/ai/rag";
 import type { GuildData, Module, ChatData } from "../types/discord";
 import { KnowledgeBaseModule } from "../../modules/ai/knowledge-completion";
+import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
+import { GUILD_DATA_PREFIX } from "../../modules/cache";
+import type { CommandLogger } from "../types/command";
 
 export default {
   data: new SlashCommandBuilder()
@@ -24,74 +28,157 @@ export default {
     .setContexts(InteractionContextType.Guild),
   async execute(
     interaction: ChatInputCommandInteraction<CacheType>,
-    module: Map<string, Module>
+    module: Map<string, Module>,
+    logger: CommandLogger
   ) {
     await interaction.reply("Beep boop beep boop, let me think...");
     const question = interaction.options.getString("question") as string;
+    const member = interaction.member as GuildMember;
+    logger.info(`${member.displayName}:${member.id} used ask command.`);
     const kbModule = module.get("kb") as KnowledgeBaseModule;
     const rag = module.get("rag") as RAGModule;
-    const member = interaction.member as GuildMember;
+    const cache = module.get("cache") as CacheModule;
+
+    const guildData = await this.getGuildData(interaction.guildId!, cache, rag);
+    if (!guildData) {
+      return await interaction.reply(
+        "This guild has not finished initial setup. Please use `/setup` first."
+      );
+    }
+    const chatData = await this.getChatData(
+      guildData.guild_id,
+      member.id,
+      rag,
+      cache
+    );
+    if (!chatData) {
+      return await this.createNewChat(
+        interaction,
+        guildData,
+        member,
+        question,
+        kbModule,
+        rag
+      );
+    }
+    return await this.sendToExistingChat(
+      interaction,
+      chatData,
+      question,
+      kbModule
+    );
+  },
+  async getGuildData(
+    guildId: string,
+    cache: CacheModule,
+    rag: RAGModule
+  ): Promise<GuildData | null> {
+    const cacheKey = `${GUILD_DATA_PREFIX}${guildId}`;
+    const cacheGuildData = await cache.get(cacheKey);
+    if (cacheGuildData) {
+      try {
+        return JSON.parse(cacheGuildData) as GuildData;
+      } catch (error) {
+        throw error;
+      }
+    }
     const { data, error } = await rag.db
       .from("guilds")
       .select()
-      .eq("guild_id", interaction.guildId)
+      .eq("guild_id", guildId)
       .limit(1);
     if (error) throw error;
-    const guildData: GuildData = data[0];
-    if (!guildData) {
-      throw new Error(
-        "You have not finished initial setup. Please use `setup` first."
-      );
+    const guildData = data[0] as GuildData;
+    if (guildData) {
+      await cache.set(cacheKey, JSON.stringify(guildData), {});
     }
-    const categoryId = guildData.category_id;
+    return guildData;
+  },
+  async getChatData(
+    guildId: string,
+    memberId: string,
+    rag: RAGModule,
+    cache: CacheModule
+  ): Promise<ChatData | null> {
+    const cacheKey = `${CHAT_DATA_PREFIX}${memberId}`;
+    const cacheChatData = await cache.get(cacheKey);
+    if (cacheChatData) {
+      try {
+        return JSON.parse(cacheChatData) as ChatData;
+      } catch (error) {
+        throw error;
+      }
+    }
     const { data: chatsData, error: chatsError } = await rag.db
       .from("chats")
       .select()
-      .eq("guild_id", interaction.guildId)
-      .eq("member_id", member.id);
-    if (chatsError) throw chatsError;
-    const chatData: ChatData = chatsData[0];
-    if (!chatData) {
-      const textChannel = await interaction.guild?.channels.create({
-        name: `chat-${interaction.user.displayName}`,
-        parent: categoryId,
-        permissionOverwrites: [
-          {
-            id: interaction.guild.roles.everyone,
-            deny: [PermissionFlagsBits.ViewChannel],
-          },
-          {
-            id: interaction.user.id,
-            allow: [PermissionFlagsBits.ViewChannel],
-          },
-          {
-            id: interaction.client.user.id,
-            allow: [PermissionFlagsBits.ViewChannel],
-          },
-        ],
-      });
-      if (!textChannel) throw new Error("Unable to create a new text channel.");
-      const result = await kbModule.execute(question);
-      await textChannel.send({
-        content: `<@${interaction.user.id}> ${result}`,
-      });
-      const { error: newChatError } = await rag.db.from("chats").insert({
-        guild_id: interaction.guildId,
-        member_id: member.id,
-        channel_id: textChannel.id,
-      });
-      if (newChatError) throw newChatError;
-      return;
+      .eq("guild_id", guildId)
+      .eq("member_id", memberId)
+      .limit(1);
+    if (chatsError) {
+      throw chatsError;
     }
+    if (chatsData[0]) {
+      await cache.set(cacheKey, JSON.stringify(chatsData[0]), {});
+    }
+    return (chatsData[0] as ChatData) || null;
+  },
+  async createNewChat(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    guildData: GuildData,
+    member: GuildMember,
+    question: string,
+    kbModule: KnowledgeBaseModule,
+    rag: RAGModule
+  ): Promise<void> {
+    const textChannel = await interaction.guild?.channels.create({
+      name: `chat-${interaction.user.displayName}`,
+      parent: guildData.category_id,
+      permissionOverwrites: [
+        {
+          id: interaction.guild.roles.everyone,
+          deny: [PermissionFlagsBits.ViewChannel],
+        },
+        {
+          id: interaction.user.id,
+          allow: [PermissionFlagsBits.ViewChannel],
+        },
+        {
+          id: interaction.client.user.id,
+          allow: [PermissionFlagsBits.ViewChannel],
+        },
+      ],
+    });
+    if (!textChannel) {
+      throw new Error("Unable to create a new text channel.");
+    }
+    const result = await kbModule.execute(question);
+    await textChannel.send({
+      content: `<@${interaction.user.id}> ${result}`,
+    });
+    const { error: newChatError } = await rag.db.from("chats").insert({
+      guild_id: interaction.guildId,
+      member_id: member.id,
+      channel_id: textChannel.id,
+    });
+    if (newChatError) {
+      throw newChatError;
+    }
+  },
+  async sendToExistingChat(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    chatData: ChatData,
+    question: string,
+    kbModule: KnowledgeBaseModule
+  ): Promise<Message<boolean>> {
     const channel = await interaction.guild?.channels.fetch(
       chatData.channel_id
     );
-    if (!channel) throw new Error("failed to get member's chat channel.");
-    if (!channel.isSendable())
-      throw new Error("unable to send a message to the channel.");
+    if (!channel) throw new Error("Failed to get member's chat channel.");
+    if (!channel.isSendable()) {
+      throw new Error("Channel is not sendable.");
+    }
     const result = await kbModule.execute(question);
-
-    // Check whether the user executed the command inside his private channel or not.
     if (interaction.channelId !== chatData.channel_id) {
       await interaction.deleteReply();
       return await channel.send({
@@ -99,7 +186,7 @@ export default {
       });
     }
     return await interaction.editReply({
-      content: result,
+      content: `<@${interaction.user.id}> ${result}`,
     });
   },
 };

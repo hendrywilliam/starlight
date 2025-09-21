@@ -1,4 +1,4 @@
-import { GuildMember, type Channel } from "discord.js";
+import { GuildMember } from "discord.js";
 import type { Module } from "../discord/types/discord";
 
 type PermissionConfig = {

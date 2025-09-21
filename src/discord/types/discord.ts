@@ -3,16 +3,8 @@ import type { Command } from "./command";
 
 type Snowflake = string;
 
-interface Logger {
-  info: (message: string, meta?: any) => any;
-  error: (message: string, meta?: any) => any;
-  warn: (message: string, meta?: any) => any;
-  debug: (message: string, meta?: any) => any;
-}
-
 export type ExtendedClient = Client & {
   commands: Collection<string, Command>;
-  log: Logger;
 };
 
 export interface Module {
