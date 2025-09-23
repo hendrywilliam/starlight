@@ -101,7 +101,7 @@ start_starlight() {
 start_redis() {
   log_info "Starting redis..."
   
-  if docker ps -a --format 'table {{.Names}}' | grep -q "^starlight$"; then
+  if docker ps -a --format 'table {{.Names}}' | grep -q "redis-starlight"; then
     log_info "Removing existing redis container..."
     docker stop redis-starlight 2>/dev/null || true
     docker rm redis-starlight 2>/dev/null || true
@@ -150,7 +150,7 @@ create_starlight_network () {
     return 0
   fi
   docker network create starlight
-  log_success Starlight network created.
+  log_success "Starlight network created."
   return 0
 }
 

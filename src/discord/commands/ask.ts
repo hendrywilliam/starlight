@@ -13,6 +13,7 @@ import { KnowledgeBaseModule } from "../../modules/ai/knowledge-completion";
 import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
 import { GUILD_DATA_PREFIX } from "../../modules/cache";
 import type { CommandLogger } from "../types/command";
+import { createHash } from "node:crypto";
 
 export default {
   data: new SlashCommandBuilder()
@@ -58,14 +59,16 @@ export default {
         member,
         question,
         kbModule,
-        rag
+        rag,
+        cache
       );
     }
     return await this.sendToExistingChat(
       interaction,
       chatData,
       question,
-      kbModule
+      kbModule,
+      cache
     );
   },
   async getGuildData(
@@ -129,7 +132,8 @@ export default {
     member: GuildMember,
     question: string,
     kbModule: KnowledgeBaseModule,
-    rag: RAGModule
+    rag: RAGModule,
+    cache: CacheModule
   ): Promise<void> {
     const textChannel = await interaction.guild?.channels.create({
       name: `chat-${interaction.user.displayName}`,
@@ -152,15 +156,23 @@ export default {
     if (!textChannel) {
       throw new Error("Unable to create a new text channel.");
     }
-    const result = await kbModule.execute(question);
+    const retrieveData = await kbModule.retrieve({
+      question: question,
+    });
+    const result = await kbModule.generate({
+      context: retrieveData.context,
+      question,
+      answer: "",
+    });
     await textChannel.send({
-      content: `<@${interaction.user.id}> ${result}`,
+      content: `<@${interaction.user.id}> ${result?.answer}`,
     });
     const { error: newChatError } = await rag.db.from("chats").insert({
       guild_id: interaction.guildId,
       member_id: member.id,
       channel_id: textChannel.id,
     });
+    // await cache.hSet(`vector-query:${}`)
     if (newChatError) {
       throw newChatError;
     }
@@ -169,8 +181,9 @@ export default {
     interaction: ChatInputCommandInteraction<CacheType>,
     chatData: ChatData,
     question: string,
-    kbModule: KnowledgeBaseModule
-  ): Promise<Message<boolean>> {
+    kbModule: KnowledgeBaseModule,
+    cache: CacheModule
+  ): Promise<void> {
     const channel = await interaction.guild?.channels.fetch(
       chatData.channel_id
     );
@@ -178,15 +191,35 @@ export default {
     if (!channel.isSendable()) {
       throw new Error("Channel is not sendable.");
     }
-    const result = await kbModule.execute(question);
+    // const result = await kbModule.execute(question);
+    const retrievedData = await kbModule.retrieve({
+      question: question,
+    });
+    console.log(retrievedData);
+    const result = await kbModule.generate({
+      context: retrievedData.context,
+      question,
+      answer: "",
+    });
+    // Send first.
     if (interaction.channelId !== chatData.channel_id) {
       await interaction.deleteReply();
-      return await channel.send({
-        content: `<@${interaction.user.id}> ${result}`,
+      await channel.send({
+        content: `<@${interaction.user.id}> ${result?.answer}`,
+      });
+    } else {
+      await interaction.editReply({
+        content: `<@${interaction.user.id}> ${result?.answer}`,
       });
     }
-    return await interaction.editReply({
-      content: `<@${interaction.user.id}> ${result}`,
-    });
+    // Cache
+
+    return;
+  },
+  async generateVectorCacheKey(question: string, context: string) {
+    const hash = createHash("sha256")
+      .update(`${question}:${context}`)
+      .digest("hex");
+    return;
   },
 };

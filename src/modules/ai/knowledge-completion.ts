@@ -35,23 +35,22 @@ export class KnowledgeBaseModule implements Module {
 
     // @ts-ignore
     this.graph = new StateGraph(StateAnnotation)
-      .addNode("retrieve", async (state) => await this._retrieve(state))
-      .addNode("generate", async (state) => await this._generate(state))
+      .addNode("retrieve", async (state) => await this.retrieve(state))
+      .addNode("generate", async (state) => await this.generate(state))
       .addEdge("__start__", "retrieve")
       .addEdge("retrieve", "generate")
       .addEdge("generate", "__end__")
       .compile();
   }
 
-  private async _retrieve(state: typeof InputStateAnnotation.State) {
+  public async retrieve(state: typeof InputStateAnnotation.State) {
     const retrievedDocs = await this.vectorStore.similaritySearch(
-      state.question,
-      1
+      state.question
     );
     return { context: retrievedDocs };
   }
 
-  private async _generate(state: typeof StateAnnotation.State) {
+  async generate(state: typeof StateAnnotation.State) {
     try {
       const promptTemplate = await pull<ChatPromptTemplate>("rlm/rag-prompt");
       const docsContent = state.context

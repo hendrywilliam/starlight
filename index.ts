@@ -6,7 +6,7 @@ import { textSplitter } from "./src/lib/text-splitter";
 import { supabase } from "./src/lib/supabase";
 import { logger } from "./src/lib/logger";
 import { CacheModule } from "./src/modules/cache";
-import { redisClient } from "./src/lib/redis";
+import { CacheRedisAdapter, redisClient } from "./src/lib/redis";
 import { KnowledgeBaseModule } from "./src/modules/ai/knowledge-completion";
 import { PermissionManagerModule } from "./src/modules/permission-manager";
 
@@ -35,7 +35,10 @@ async function main() {
         chatChannels: process.env.CHAT_AI_CHANNEL?.split(",") || [],
       })
     )
-    .addModule("cache", new CacheModule(redisClient))
+    .addModule(
+      "cache",
+      new CacheModule(new CacheRedisAdapter(redisClient), embeddings)
+    )
     .start();
 
   async function gracefulShutdown() {
