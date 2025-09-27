@@ -1,8 +1,8 @@
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-import { embeddings } from "./embeddings";
+import { embedding } from "./embeddings";
 import { supabase } from "./supabase";
 
-export const vectorStore = new SupabaseVectorStore(embeddings, {
+export const supabaseVectorStore = new SupabaseVectorStore(embedding, {
   client: supabase,
   tableName: "documents",
   queryName: "match_documents",

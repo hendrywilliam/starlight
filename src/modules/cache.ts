@@ -1,10 +1,11 @@
-import type { Embeddings } from "@langchain/core/embeddings";
 import type { Module } from "../discord/types/discord";
+
+import type { Document } from "@langchain/core/documents";
 
 export const GUILD_DATA_PREFIX = "guild:";
 export const CHAT_DATA_PREFIX = "chat:";
 export const VECTOR_QUERY_PREFIX = "vector_query:";
-export const VECTOR_RESULT_PREFIX = "";
+export const VECTOR_RESULT_PREFIX = "vector_result:";
 
 export type CacheOptions = {
   EX?: number; // TTL in seconds.
@@ -20,18 +21,16 @@ export interface CacheClient {
     value: string,
     options?: CacheOptions
   ) => Promise<string | null>;
-  hSet: (key: string, data: Record<string, any>) => Promise<any>;
   del: (key: string) => Promise<number>;
-  similaritySearch: (query: number[]) => Promise<any>;
+  addDocuments: (docs: Document[]) => Promise<any>;
+  similaritySearch: (query: string) => Promise<any>;
 }
 
 export class CacheModule implements Module {
   public client: CacheClient;
-  public embedding: Embeddings;
 
-  constructor(client: CacheClient, embedding: Embeddings) {
+  constructor(client: CacheClient) {
     this.client = client;
-    this.embedding = embedding;
   }
 
   public async set(key: string, value: string, options?: CacheOptions) {
@@ -42,17 +41,16 @@ export class CacheModule implements Module {
     return await this.client.get(key);
   }
 
-  public async hSet(key: string, data: Record<string, any>) {
-    return await this.client.hSet(key, data);
-  }
-
   public async del(key: string) {
     return await this.client.del(key);
   }
 
+  public async addDocuments(docs: Document[]) {
+    return await this.client.addDocuments(docs);
+  }
+
   public async similaritySearch(query: string) {
-    const queryEmbedding = await this.embedding.embedQuery(query);
-    return await this.client.similaritySearch(queryEmbedding);
+    return await this.client.similaritySearch(query);
   }
 
   public execute(data: unknown, ...args: any[]) {

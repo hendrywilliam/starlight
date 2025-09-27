@@ -1,12 +1,12 @@
 import { pull } from "langchain/hub";
+import type { Logger } from "winston";
 import { ChatOpenAI } from "@langchain/openai";
+import type { Document } from "langchain/document";
+import type { Module } from "../../discord/types/discord";
 import { Annotation, StateGraph } from "@langchain/langgraph";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { VectorStore } from "@langchain/core/vectorstores";
-import type { Module } from "../../discord/types/discord";
-import type { Document } from "langchain/document";
-import type { Logger } from "winston";
 
 const StateAnnotation = Annotation.Root({
   question: Annotation<string>,
@@ -44,19 +44,26 @@ export class KnowledgeBaseModule implements Module {
   }
 
   public async retrieve(state: typeof InputStateAnnotation.State) {
-    const retrievedDocs = await this.vectorStore.similaritySearch(
+    const questionEmbedding = await this.vectorStore.embeddings.embedQuery(
       state.question
     );
-    return { context: retrievedDocs };
+    const retrievedDocs =
+      await this.vectorStore.similaritySearchVectorWithScore(
+        questionEmbedding,
+        4
+      );
+    const actualContexts = retrievedDocs.map((doc) => doc[0]);
+    return { context: actualContexts };
   }
 
   async generate(state: typeof StateAnnotation.State) {
     try {
       const promptTemplate = await pull<ChatPromptTemplate>("rlm/rag-prompt");
       const docsContent = state.context
-        .map((document) => (document as Document).pageContent)
+        .map((document) => {
+          return (document as Document).pageContent;
+        })
         .join();
-
       const messages = await promptTemplate.invoke({
         question: state.question,
         context: docsContent,

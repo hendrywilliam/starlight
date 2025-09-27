@@ -53,12 +53,6 @@ export class RAGModule implements Module {
     return await this.vectorStore.similaritySearch(query, k, filter);
   }
 
-  public async asRetriever(
-    ...args: Parameters<typeof this.vectorStore.asRetriever>
-  ) {
-    return await this.vectorStore.asRetriever(...args);
-  }
-
   public async embedQuery(document: string) {
     return await this.embedding.embedQuery(document);
   }

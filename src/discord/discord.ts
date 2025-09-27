@@ -234,19 +234,33 @@ export class Discord {
             `No command matching ${interaction.commandName} was found.`
           );
         }
-        const permission = this.module.get("permission") as
-          | PermissionManagerModule
-          | undefined;
-        if (!permission)
-          throw new Error("You are not allowed to use this command.");
-        if (
-          !permission.hasPermission(
-            interaction.member as GuildMember,
-            interaction.commandName
-          )
-        )
-          throw new Error("You are not allowed to use this command.");
-        await command?.execute(interaction, this.module, this.logger);
+        const permission = this.module.get(
+          "permission"
+        ) as PermissionManagerModule;
+        // Only owner can use setup.
+        if (interaction.commandName === "setup") {
+          // Check owner
+          const isServerOwner = permission.isOwner(
+            interaction.guild?.ownerId || "",
+            (interaction.member as GuildMember).id
+          );
+          if (!isServerOwner) {
+            throw new Error(
+              "You are not allowed to use this command. Contact server owner."
+            );
+          }
+          await command.execute(interaction, this.module, this.logger);
+        } else {
+          if (
+            !permission.hasPermission(
+              interaction.member as GuildMember,
+              interaction.commandName
+            )
+          ) {
+            throw new Error("You are not allowed to use this command.");
+          }
+          await command.execute(interaction, this.module, this.logger);
+        }
       } catch (error) {
         const errorMessage = "There was an error while executing this command.";
         const _error = error instanceof Error ? error.message : errorMessage;

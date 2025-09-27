@@ -98,24 +98,40 @@ start_starlight() {
   fi
 }
 
-start_redis() {
+create_redis_index() {
+  log_info "Checking redis index..."
+
+  docker exec -i redis-stack-starlight redis-cli -a starlight FT.CREATE vector_idx ON HASH PREFIX 1 document: SCHEMA content TEXT id TAG parent_id TAG channel_id TAG attachment_id TAG attachment_name TAG embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 1536 DISTANCE_METRIC L2
+  
+  if [ $? -eq 0 ]; then
+    log_success "Vector index created."
+    return 0
+  else
+    log_error "Failed to create vector index"
+    return 1
+  fi
+}
+
+start_redis_stack() {
   log_info "Starting redis..."
   
-  if docker ps -a --format 'table {{.Names}}' | grep -q "redis-starlight"; then
+  if docker ps -a --format 'table {{.Names}}' | grep -q "redis-stack-starlight"; then
     log_info "Removing existing redis container..."
-    docker stop redis-starlight 2>/dev/null || true
-    docker rm redis-starlight 2>/dev/null || true
+    docker stop redis-stack-starlight 2>/dev/null || true
+    docker rm redis-stack-starlight 2>/dev/null || true
   fi
 
   docker run \
     -d \
-    --name redis-starlight \
+    --name redis-stack-starlight \
     -p 127.0.0.1:6379:6379 \
     --network starlight \
-    redis:latest
+    -e REDIS_ARGS="--requirepass starlight" \
+    redis/redis-stack:latest
   
   if [ $? -eq 0 ]; then
-    log_success "Redis container has started."
+    log_success "Redis-stack container has started."
+    create_redis_index
     return 0
   else
     log_error "Failed to start redis container."
@@ -128,11 +144,11 @@ clean_all() {
 
   log_info "Checking all containers related..."
   docker stop $(docker ps -q --filter "ancestor=starlight:latest" 2>/dev/null) 2>/dev/null || true
-  docker stop $(docker ps -q --filter "name=redis-starlight" 2>/dev/null) 2>/dev/null || true
+  docker stop $(docker ps -q --filter "name=redis-stack-starlight" 2>/dev/null) 2>/dev/null || true
 
   log_info "Removing all containers related..."
   docker rm $(docker ps -aq --filter "ancestor=starlight:latest" 2>/dev/null) 2>/dev/null || true
-  docker rm $(docker ps -aq --filter "name=redis-starlight" 2>/dev/null) 2>/dev/null || true
+  docker rm $(docker ps -aq --filter "name=redis-stack-starlight" 2>/dev/null) 2>/dev/null || true
 
   log_info "Removing images..."
   docker rmi starlight:latest 2>/dev/null || true
@@ -154,7 +170,7 @@ create_starlight_network () {
   return 0
 }
 
-REDIS_CONTAINER=false
+REDIS_STACK_CONTAINER=false
 CLEAN_ALL_IMAGES=false
 STARLIGHT_CONTAINER=false
 
@@ -170,7 +186,7 @@ while [ "$1" != "" ]; do
       CLEAN_ALL_IMAGES=true
       ;;
     -r | --redis )
-      REDIS_CONTAINER=true
+      REDIS_STACK_CONTAINER=true
       ;;
     * )
       log_error "Unrecognized command: $1"
@@ -193,8 +209,8 @@ if [ "$STARLIGHT_CONTAINER" = true ]; then
   fi
 fi
 
-if [ "$REDIS_CONTAINER" = true ]; then
-  start_redis
+if [ "$REDIS_STACK_CONTAINER" = true ]; then
+  start_redis_stack
   exit $?
 fi
 

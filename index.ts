@@ -1,11 +1,12 @@
+import { logger } from "./src/lib/logger";
+import { supabase } from "./src/lib/supabase";
 import { Discord } from "./src/discord/discord";
 import { RAGModule } from "./src/modules/ai/rag";
-import { embeddings } from "./src/lib/embeddings";
-import { vectorStore } from "./src/lib/vector-store";
-import { textSplitter } from "./src/lib/text-splitter";
-import { supabase } from "./src/lib/supabase";
-import { logger } from "./src/lib/logger";
 import { CacheModule } from "./src/modules/cache";
+import { embedding } from "./src/lib/embeddings";
+import { RedisVectorStore } from "@langchain/redis";
+import { textSplitter } from "./src/lib/text-splitter";
+import { supabaseVectorStore } from "./src/lib/vector-store";
 import { CacheRedisAdapter, redisClient } from "./src/lib/redis";
 import { KnowledgeBaseModule } from "./src/modules/ai/knowledge-completion";
 import { PermissionManagerModule } from "./src/modules/permission-manager";
@@ -21,10 +22,16 @@ async function main() {
     logger
   );
   discord
-    .addModule("kb", new KnowledgeBaseModule(vectorStore, logger))
+    .addModule("kb", new KnowledgeBaseModule(supabaseVectorStore, logger))
     .addModule(
       "rag",
-      new RAGModule(embeddings, vectorStore, textSplitter, supabase, logger)
+      new RAGModule(
+        embedding,
+        supabaseVectorStore,
+        textSplitter,
+        supabase,
+        logger
+      )
     )
     .addModule(
       "permission",
@@ -37,7 +44,16 @@ async function main() {
     )
     .addModule(
       "cache",
-      new CacheModule(new CacheRedisAdapter(redisClient), embeddings)
+      new CacheModule(
+        new CacheRedisAdapter(
+          redisClient,
+          new RedisVectorStore(embedding, {
+            // @ts-ignore
+            redisClient,
+            indexName: "vector_idx",
+          })
+        )
+      )
     )
     .start();
 

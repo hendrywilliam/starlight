@@ -1,7 +1,6 @@
 import {
   ChatInputCommandInteraction,
   GuildMember,
-  Message,
   PermissionFlagsBits,
   SlashCommandBuilder,
   type CacheType,
@@ -10,10 +9,13 @@ import { InteractionContextType } from "discord.js";
 import type { RAGModule } from "../../modules/ai/rag";
 import type { GuildData, Module, ChatData } from "../types/discord";
 import { KnowledgeBaseModule } from "../../modules/ai/knowledge-completion";
-import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
+import {
+  CacheModule,
+  CHAT_DATA_PREFIX,
+  VECTOR_RESULT_PREFIX,
+} from "../../modules/cache";
 import { GUILD_DATA_PREFIX } from "../../modules/cache";
 import type { CommandLogger } from "../types/command";
-import { createHash } from "node:crypto";
 
 export default {
   data: new SlashCommandBuilder()
@@ -36,13 +38,14 @@ export default {
     const question = interaction.options.getString("question") as string;
     const member = interaction.member as GuildMember;
     logger.info(`${member.displayName}:${member.id} used ask command.`);
+
     const kbModule = module.get("kb") as KnowledgeBaseModule;
     const rag = module.get("rag") as RAGModule;
     const cache = module.get("cache") as CacheModule;
 
     const guildData = await this.getGuildData(interaction.guildId!, cache, rag);
     if (!guildData) {
-      return await interaction.reply(
+      return await interaction.editReply(
         "This guild has not finished initial setup. Please use `/setup` first."
       );
     }
@@ -82,7 +85,7 @@ export default {
       try {
         return JSON.parse(cacheGuildData) as GuildData;
       } catch (error) {
-        throw error;
+        throw new Error("Internal server error.");
       }
     }
     const { data, error } = await rag.db
@@ -109,14 +112,16 @@ export default {
       try {
         return JSON.parse(cacheChatData) as ChatData;
       } catch (error) {
-        throw error;
+        throw new Error("Internal server error.");
       }
     }
     const { data: chatsData, error: chatsError } = await rag.db
       .from("chats")
       .select()
-      .eq("guild_id", guildId)
-      .eq("member_id", memberId)
+      .match({
+        guild_id: guildId,
+        member_id: memberId,
+      })
       .limit(1);
     if (chatsError) {
       throw chatsError;
@@ -135,46 +140,49 @@ export default {
     rag: RAGModule,
     cache: CacheModule
   ): Promise<void> {
-    const textChannel = await interaction.guild?.channels.create({
-      name: `chat-${interaction.user.displayName}`,
-      parent: guildData.category_id,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone,
-          deny: [PermissionFlagsBits.ViewChannel],
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionFlagsBits.ViewChannel],
-        },
-        {
-          id: interaction.client.user.id,
-          allow: [PermissionFlagsBits.ViewChannel],
-        },
-      ],
-    });
-    if (!textChannel) {
-      throw new Error("Unable to create a new text channel.");
-    }
-    const retrieveData = await kbModule.retrieve({
-      question: question,
-    });
-    const result = await kbModule.generate({
-      context: retrieveData.context,
-      question,
-      answer: "",
-    });
-    await textChannel.send({
-      content: `<@${interaction.user.id}> ${result?.answer}`,
-    });
-    const { error: newChatError } = await rag.db.from("chats").insert({
-      guild_id: interaction.guildId,
-      member_id: member.id,
-      channel_id: textChannel.id,
-    });
-    // await cache.hSet(`vector-query:${}`)
-    if (newChatError) {
-      throw newChatError;
+    try {
+      console.log("hi");
+      const textChannel = await interaction.guild?.channels.create({
+        name: `chat-${interaction.user.displayName}`,
+        parent: guildData.category_id,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.roles.everyone,
+            deny: [PermissionFlagsBits.ViewChannel],
+          },
+          {
+            id: interaction.user.id,
+            allow: [PermissionFlagsBits.ViewChannel],
+          },
+          {
+            id: interaction.client.user.id,
+            allow: [PermissionFlagsBits.ViewChannel],
+          },
+        ],
+      });
+      if (!textChannel) {
+        throw new Error("Unable to create a new text channel.");
+      }
+      const retrievedData = await kbModule.retrieve({
+        question: question,
+      });
+      const result = await kbModule.generate({
+        context: retrievedData?.context || [],
+        question,
+        answer: "",
+      });
+      await textChannel.send({
+        content: `<@${interaction.user.id}> ${result?.answer}`,
+      });
+      await rag.db.from("chats").insert({
+        guild_id: interaction.guildId,
+        member_id: member.id,
+        channel_id: textChannel.id,
+      });
+      await cache.addDocuments(retrievedData.context);
+      return;
+    } catch (error) {
+      throw error;
     }
   },
   async sendToExistingChat(
@@ -184,24 +192,34 @@ export default {
     kbModule: KnowledgeBaseModule,
     cache: CacheModule
   ): Promise<void> {
-    const channel = await interaction.guild?.channels.fetch(
+    const channel = await interaction.client.channels.fetch(
       chatData.channel_id
     );
     if (!channel) throw new Error("Failed to get member's chat channel.");
     if (!channel.isSendable()) {
       throw new Error("Channel is not sendable.");
     }
-    // const result = await kbModule.execute(question);
-    const retrievedData = await kbModule.retrieve({
-      question: question,
-    });
-    console.log(retrievedData);
-    const result = await kbModule.generate({
-      context: retrievedData.context,
-      question,
-      answer: "",
-    });
-    // Send first.
+    const cachedVectorData: Document[] = await cache.similaritySearch(question);
+    let retrievedData: any; // Define the type based on your KnowledgeBaseModule return type
+    let result: any; // Define the type based on your KnowledgeBaseModule return type
+    if (cachedVectorData && cachedVectorData.length > 0) {
+      result = await kbModule.generate({
+        // @ts-ignore
+        context: cachedVectorData,
+        question,
+        answer: "",
+      });
+    } else {
+      retrievedData = await kbModule.retrieve({
+        question: question,
+      });
+      result = await kbModule.generate({
+        context: retrievedData.context,
+        question,
+        answer: "",
+      });
+      await cache.addDocuments(retrievedData.context);
+    }
     if (interaction.channelId !== chatData.channel_id) {
       await interaction.deleteReply();
       await channel.send({
@@ -212,14 +230,5 @@ export default {
         content: `<@${interaction.user.id}> ${result?.answer}`,
       });
     }
-    // Cache
-
-    return;
-  },
-  async generateVectorCacheKey(question: string, context: string) {
-    const hash = createHash("sha256")
-      .update(`${question}:${context}`)
-      .digest("hex");
-    return;
   },
 };

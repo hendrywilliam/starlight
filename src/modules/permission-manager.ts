@@ -1,4 +1,4 @@
-import { GuildMember } from "discord.js";
+import { GuildMember, type Snowflake } from "discord.js";
 import type { Module } from "../discord/types/discord";
 
 type PermissionConfig = {
@@ -17,6 +17,7 @@ export class PermissionManagerModule implements Module {
 
   public hasPermission(member: GuildMember | null, commandName: string) {
     if (!member) return false;
+
     const memberRoles = member.roles.cache.map((role) => role.id);
     if (this.config.privilegedCommands.includes(commandName)) {
       return this.isPrivilegedRole(memberRoles);
@@ -34,6 +35,10 @@ export class PermissionManagerModule implements Module {
     return this.config.allowedChannels.some(
       (_channel) => _channel === channelId
     );
+  }
+
+  public isOwner(ownerId: string, memberId: string) {
+    return ownerId === memberId;
   }
 
   public execute(): void {
