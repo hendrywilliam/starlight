@@ -101,15 +101,22 @@ start_starlight() {
 create_redis_index() {
   log_info "Checking redis index..."
 
-  docker exec -i redis-stack-starlight redis-cli -a starlight FT.CREATE vector_idx ON HASH PREFIX 1 document: SCHEMA content TEXT id TAG parent_id TAG channel_id TAG attachment_id TAG attachment_name TAG embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 1536 DISTANCE_METRIC L2
+  docker exec -i redis-stack-starlight redis-cli -a starlight \
+  FT.CREATE vector_idx ON HASH PREFIX 1 "doc:vector_idx" SCHEMA \
+  content TEXT \
+  id TAG \
+  parent_id TAG \
+  channel_id TAG \
+  attachment_id TAG \
+  attachment_name TAG \
+  embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 1536 DISTANCE_METRIC L2
   
   if [ $? -eq 0 ]; then
     log_success "Vector index created."
     return 0
-  else
-    log_error "Failed to create vector index"
-    return 1
   fi
+  log_error "Failed to create vector index"
+  return 1
 }
 
 start_redis_stack() {

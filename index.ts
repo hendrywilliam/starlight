@@ -4,12 +4,16 @@ import { Discord } from "./src/discord/discord";
 import { RAGModule } from "./src/modules/ai/rag";
 import { CacheModule } from "./src/modules/cache";
 import { embedding } from "./src/lib/embeddings";
-import { RedisVectorStore } from "@langchain/redis";
+import {
+  RedisVectorStore,
+  type CreateSchemaHNSWVectorField,
+} from "@langchain/redis";
 import { textSplitter } from "./src/lib/text-splitter";
 import { supabaseVectorStore } from "./src/lib/vector-store";
 import { CacheRedisAdapter, redisClient } from "./src/lib/redis";
 import { KnowledgeBaseModule } from "./src/modules/ai/knowledge-completion";
 import { PermissionManagerModule } from "./src/modules/permission-manager";
+import { SCHEMA_VECTOR_FIELD_ALGORITHM } from "redis";
 
 async function main() {
   redisClient.on("error", (err) => {
@@ -51,6 +55,13 @@ async function main() {
             // @ts-ignore
             redisClient,
             indexName: "vector_idx",
+            indexOptions: {
+              ALGORITHM: SCHEMA_VECTOR_FIELD_ALGORITHM.HNSW,
+              DISTANCE_METRIC: "L2",
+            } as CreateSchemaHNSWVectorField,
+            contentKey: "content",
+            vectorKey: "embedding",
+            keyPrefix: "doc:vector_idx",
           })
         )
       )

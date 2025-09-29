@@ -9,13 +9,11 @@ import { InteractionContextType } from "discord.js";
 import type { RAGModule } from "../../modules/ai/rag";
 import type { GuildData, Module, ChatData } from "../types/discord";
 import { KnowledgeBaseModule } from "../../modules/ai/knowledge-completion";
-import {
-  CacheModule,
-  CHAT_DATA_PREFIX,
-  VECTOR_RESULT_PREFIX,
-} from "../../modules/cache";
+import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
 import { GUILD_DATA_PREFIX } from "../../modules/cache";
 import type { CommandLogger } from "../types/command";
+import type { DocumentInterface, Document } from "@langchain/core/documents";
+import type { MessageContent } from "@langchain/core/messages";
 
 export default {
   data: new SlashCommandBuilder()
@@ -85,7 +83,7 @@ export default {
       try {
         return JSON.parse(cacheGuildData) as GuildData;
       } catch (error) {
-        throw new Error("Internal server error.");
+        throw new Error("failed to parse guild cached data.");
       }
     }
     const { data, error } = await rag.db
@@ -106,13 +104,13 @@ export default {
     rag: RAGModule,
     cache: CacheModule
   ): Promise<ChatData | null> {
-    const cacheKey = `${CHAT_DATA_PREFIX}${memberId}`;
+    const cacheKey = `${CHAT_DATA_PREFIX}${guildId}:${memberId}`;
     const cacheChatData = await cache.get(cacheKey);
     if (cacheChatData) {
       try {
         return JSON.parse(cacheChatData) as ChatData;
       } catch (error) {
-        throw new Error("Internal server error.");
+        throw new Error("failed to parse cached chat data.");
       }
     }
     const { data: chatsData, error: chatsError } = await rag.db
@@ -141,7 +139,6 @@ export default {
     cache: CacheModule
   ): Promise<void> {
     try {
-      console.log("hi");
       const textChannel = await interaction.guild?.channels.create({
         name: `chat-${interaction.user.displayName}`,
         parent: guildData.category_id,
@@ -160,9 +157,8 @@ export default {
           },
         ],
       });
-      if (!textChannel) {
-        throw new Error("Unable to create a new text channel.");
-      }
+      if (!textChannel) throw new Error("Unable to create a new text channel.");
+
       const retrievedData = await kbModule.retrieve({
         question: question,
       });
@@ -179,7 +175,14 @@ export default {
         member_id: member.id,
         channel_id: textChannel.id,
       });
-      await cache.addDocuments(retrievedData.context);
+      await cache.addDocuments(
+        retrievedData.context.map((data) => {
+          return {
+            pageContent: data.pageContent,
+            metadata: {},
+          };
+        })
+      );
       return;
     } catch (error) {
       throw error;
@@ -196,29 +199,32 @@ export default {
       chatData.channel_id
     );
     if (!channel) throw new Error("Failed to get member's chat channel.");
-    if (!channel.isSendable()) {
-      throw new Error("Channel is not sendable.");
-    }
-    const cachedVectorData: Document[] = await cache.similaritySearch(question);
-    let retrievedData: any; // Define the type based on your KnowledgeBaseModule return type
-    let result: any; // Define the type based on your KnowledgeBaseModule return type
+    if (!channel.isSendable()) throw new Error("Channel is not sendable.");
+    let retrievedData: DocumentInterface[];
+    let result: { answer: MessageContent } | undefined;
+    const cachedVectorData: [[Document, number]] = await cache.similaritySearch(
+      question
+    );
     if (cachedVectorData && cachedVectorData.length > 0) {
       result = await kbModule.generate({
-        // @ts-ignore
-        context: cachedVectorData,
+        context: cachedVectorData.map((item: [Document, number]) => {
+          return item[0];
+        }),
         question,
         answer: "",
       });
     } else {
-      retrievedData = await kbModule.retrieve({
-        question: question,
-      });
+      retrievedData = (
+        await kbModule.retrieve({
+          question: question,
+        })
+      ).context;
       result = await kbModule.generate({
-        context: retrievedData.context,
+        context: retrievedData,
         question,
         answer: "",
       });
-      await cache.addDocuments(retrievedData.context);
+      await cache.addDocuments(retrievedData);
     }
     if (interaction.channelId !== chatData.channel_id) {
       await interaction.deleteReply();
@@ -227,7 +233,7 @@ export default {
       });
     } else {
       await interaction.editReply({
-        content: `<@${interaction.user.id}> ${result?.answer}`,
+        content: `<@${interaction.user.id}>  ${result?.answer}`,
       });
     }
   },

@@ -1,7 +1,8 @@
 import { createClient } from "redis";
 import type { CacheClient, CacheOptions } from "../modules/cache";
-import type { Document } from "langchain/document";
+
 import type { VectorStore } from "@langchain/core/vectorstores";
+import type { DocumentInterface } from "@langchain/core/documents";
 
 export const redisClient = createClient({
   socket: {
@@ -41,11 +42,15 @@ export class CacheRedisAdapter implements CacheClient {
     return await this.client.expire(key, duration);
   }
 
-  public async addDocuments(docs: Document[]): Promise<any> {
+  public async addDocuments(docs: DocumentInterface[]): Promise<any> {
     return await this.vectorStore.addDocuments(docs);
   }
 
   public async similaritySearch(query: string): Promise<any> {
-    return await this.vectorStore.similaritySearch(query, 2);
+    const queryVector = await this.vectorStore.embeddings.embedQuery(query);
+    return await this.vectorStore.similaritySearchVectorWithScore(
+      queryVector,
+      4
+    );
   }
 }

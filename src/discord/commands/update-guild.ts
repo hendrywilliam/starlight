@@ -4,9 +4,9 @@ import {
   SlashCommandBuilder,
   type CacheType,
 } from "discord.js";
-import type { GuildData, Module } from "../types/discord";
 import type { RAGModule } from "../../modules/ai/rag";
 import type { CommandLogger } from "../types/command";
+import type { GuildData, Module } from "../types/discord";
 
 export default {
   data: new SlashCommandBuilder()

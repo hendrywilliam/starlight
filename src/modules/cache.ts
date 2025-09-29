@@ -1,6 +1,6 @@
 import type { Module } from "../discord/types/discord";
 
-import type { Document } from "@langchain/core/documents";
+import type { Document, DocumentInterface } from "@langchain/core/documents";
 
 export const GUILD_DATA_PREFIX = "guild:";
 export const CHAT_DATA_PREFIX = "chat:";
@@ -45,7 +45,7 @@ export class CacheModule implements Module {
     return await this.client.del(key);
   }
 
-  public async addDocuments(docs: Document[]) {
+  public async addDocuments(docs: DocumentInterface[]) {
     return await this.client.addDocuments(docs);
   }
 
