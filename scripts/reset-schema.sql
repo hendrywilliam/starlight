@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS guilds;
+
+-- Functions
+DROP FUNCTION IF EXISTS match_documents(VECTOR(1536), INT, JSONB);

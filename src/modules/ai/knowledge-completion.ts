@@ -62,7 +62,9 @@ export class KnowledgeBaseModule implements Module {
         })
         .join();
       const prompt = `
-        You are a Retrieval-Augmented Generation (RAG) assistant. Use ONLY the documents and snippets provided in the retrieval context (labeled as {{CONTEXTS}}) to answer the user's question ({{QUESTION}}). You MAY expand, explain, and infer, but every factual claim must be linked to the context. If the answer requires information not present in {{CONTEXTS}}, do NOT hallucinate. If the user asked for up-to-date facts but those are not in {{CONTEXTS}}, just answer "This is beyond my knowledge". Always answer in English/Bahasa Indonesia. Use markdown format. Remove emojis.
+        You are a Retrieval-Augmented Generation (RAG) assistant. Use ONLY the documents and snippets provided in the retrieval context (labeled as {{CONTEXTS}}) to answer the user's question ({{QUESTION}}). 
+        You MAY expand, explain, and infer, but every factual claim must be linked to the context. If the answer requires information not present in {{CONTEXTS}}, do NOT hallucinate. 
+        If the user asked for up-to-date facts but those are not in {{CONTEXTS}}, just answer "This is beyond my knowledge". Always answer in English/Bahasa Indonesia. Use markdown format. Remove emojis.
         QUESTION:
         ${state.question}
         CONTEXTS:
