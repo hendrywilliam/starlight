@@ -4,7 +4,7 @@ import {
   SlashCommandBuilder,
   type CacheType,
 } from "discord.js";
-import type { RAGModule } from "../../modules/ai/rag";
+import type { RAGModule } from "../../modules/rag";
 import type { CommandLogger } from "../types/command";
 import type { GuildData, Module } from "../types/discord";
 
@@ -16,7 +16,7 @@ export default {
       option
         .setName("category_id")
         .setDescription(
-          "Specify a Category Channel ID to host AI chats for every player."
+          "Privileged command. Specify a Category Channel ID to host AI chats for every player."
         )
         .setRequired(false);
       return option;

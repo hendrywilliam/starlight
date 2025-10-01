@@ -5,18 +5,27 @@ import {
   type CacheType,
 } from "discord.js";
 import type { DocumentChunkMetadata, Module } from "../types/discord";
-import type { RAGModule } from "../../modules/ai/rag";
+import type { RAGModule } from "../../modules/rag";
 
 export default {
   data: new SlashCommandBuilder()
     .setName("fetch")
-    .setDescription("fetch a message and feed it to database.")
+    .setDescription(
+      "Privileged command. Fetch a message and feed it to database."
+    )
     .addChannelOption((option) => {
       option
-        .setName("source")
+        .setName("channel")
         .setDescription("Message as source of truth.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
+        .setRequired(true);
+      return option;
+    })
+    .addStringOption((option) => {
+      option
+        .setName("source")
+        .setDescription("Message as source of truth.")
         .setRequired(true);
       return option;
     }),
@@ -25,24 +34,24 @@ export default {
     module: Map<string, Module>
   ) {
     await interaction.reply("Beep boop beep boop. Fetching selected thread...");
-    const channel = interaction.options.getChannel("source");
-    if (!channel) throw new Error("failed to fetch channel data");
+    const messageId = interaction.options.getString("source") as string;
+    const channel = interaction.options.getChannel("channel");
+    if (!channel) throw new Error("Failed to fetch channel data.");
+
     const actualChannel = await interaction.client.channels.fetch(channel.id);
-    if (!actualChannel) throw new Error("failed to get channel data.");
-    if (!actualChannel.isThread())
+    if (!actualChannel) throw new Error("Failed to get channel data.");
+
+    if (!actualChannel.isThread()) {
       throw new Error(
         "You have selected the wrong type of channel. Fetch only accept a thread."
       );
-    const channelId = actualChannel.parentId as string;
-
-    const messages = await actualChannel.messages.fetch();
-    const message = messages.last();
-    if (!message)
-      throw new Error("Failed to get first message from selected thread.");
-
+    }
+    const message = await actualChannel.messages.fetch(messageId);
+    if (!message) {
+      throw new Error("Selected message is not found.");
+    }
     const ragModule = module.get("rag") as RAGModule | undefined;
     if (!ragModule) throw new Error("Failed to get dependency module.");
-
     const contents = await ragModule.splitText(message.content);
     const rows = await Promise.all(
       contents.map(async (item, index) => {
@@ -52,7 +61,7 @@ export default {
           metadata: {
             id: `${message.id}_chunk_${index}`,
             parent_id: message.id,
-            channel_id: channelId,
+            channel_id: actualChannel.id,
           } satisfies DocumentChunkMetadata,
           embedding: vectorFromQuery,
         };
@@ -76,7 +85,7 @@ export default {
               return {
                 content: item,
                 metadata: {
-                  channel_id: channelId,
+                  channel_id: actualChannel.id,
                   id: `${message.id}_chunk_${index}`,
                   parent_id: message.id,
                   is_attachment: true,
@@ -98,6 +107,6 @@ export default {
       continue;
     }
     await ragModule.db.from("documents").insert(rows);
-    await interaction.editReply("Fetch succeded.");
+    await interaction.editReply("Fetch message succeded.");
   },
 };

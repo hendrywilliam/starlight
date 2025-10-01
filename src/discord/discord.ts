@@ -1,9 +1,11 @@
 import {
+  BaseInteraction,
   Client,
   Collection,
   Events,
   GatewayIntentBits,
   GuildMember,
+  type CacheType,
 } from "discord.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,9 +14,10 @@ import type {
   Module,
   DocumentChunkMetadata,
 } from "./types/discord";
-import type { RAGModule } from "../modules/ai/rag";
+import type { RAGModule } from "../modules/rag";
 import { PermissionManagerModule } from "../modules/permission-manager";
 import type { Logger } from "winston";
+import { ROLES_PREFIX, type CacheModule } from "../modules/cache";
 
 export class Discord {
   private client: ExtendedClient;
@@ -151,11 +154,7 @@ export class Discord {
         if (!permission || !permission.isAllowedChannel(thread.parentId!)) {
           return;
         }
-        const ragModule = this.module.get("rag") as RAGModule | undefined;
-        if (!ragModule) {
-          this.logger.error("cant find selected module: RAG");
-          return;
-        }
+        const ragModule = this.module.get("rag") as RAGModule;
         const { error } = await ragModule.db
           .from("documents")
           .delete()
@@ -182,10 +181,7 @@ export class Discord {
           return;
         }
         this.logger.info(`changes detected in message with id: ${fresh.id}.`);
-        const ragModule = this.module.get("rag") as RAGModule | undefined;
-        if (!ragModule) {
-          return;
-        }
+        const ragModule = this.module.get("rag") as RAGModule;
         const messageId = fresh.id;
         const content = fresh.content;
         const splitted = await ragModule.splitText(content);
@@ -234,33 +230,60 @@ export class Discord {
             `No command matching ${interaction.commandName} was found.`
           );
         }
-        const permission = this.module.get(
-          "permission"
-        ) as PermissionManagerModule;
-        // Only owner can use setup.
-        if (interaction.commandName === "setup") {
-          // Check owner
-          const isServerOwner = permission.isOwner(
-            interaction.guild?.ownerId || "",
-            (interaction.member as GuildMember).id
-          );
-          if (!isServerOwner) {
-            throw new Error(
-              "You are not allowed to use this command. Contact server owner."
+        const perm = this.module.get("permission") as PermissionManagerModule;
+
+        const rag = this.module.get("rag") as RAGModule;
+        const cache = this.module.get("cache") as CacheModule;
+        const moderatorCachedData = await cache.get(
+          `${ROLES_PREFIX}${interaction.guildId}`
+        );
+        let moderatorData;
+        if (!moderatorCachedData) {
+          const { data, error } = await rag.db
+            .from("guild_moderators")
+            .select()
+            .match({
+              guild_id: interaction.guildId,
+            });
+          if (error) throw error;
+
+          moderatorData =
+            data && data.length > 0
+              ? data.map((row) => {
+                  return row.role_id;
+                })
+              : [];
+          if (moderatorData.length > 0) {
+            await cache.set(
+              `${ROLES_PREFIX}${interaction.guildId}`,
+              moderatorData.join(",")
             );
           }
-          await command.execute(interaction, this.module, this.logger);
         } else {
-          if (
-            !permission.hasPermission(
-              interaction.member as GuildMember,
-              interaction.commandName
-            )
-          ) {
-            throw new Error("You are not allowed to use this command.");
+          try {
+            moderatorData = JSON.parse(moderatorCachedData);
+          } catch (error) {
+            moderatorData = [];
           }
-          await command.execute(interaction, this.module, this.logger);
         }
+        if (
+          !perm.hasPermission(
+            interaction.member as GuildMember,
+            interaction.commandName,
+            moderatorData,
+            interaction.guild?.ownerId || ""
+          )
+        ) {
+          if (interaction.replied || interaction.deferred) {
+            return await interaction.editReply({
+              content: "You are not allowed to use this command.",
+            });
+          }
+          return await interaction.reply(
+            "You are not allowed to use this command."
+          );
+        }
+        await command.execute(interaction, this.module, this.logger);
       } catch (error) {
         const errorMessage = "There was an error while executing this command.";
         const _error = error instanceof Error ? error.message : errorMessage;

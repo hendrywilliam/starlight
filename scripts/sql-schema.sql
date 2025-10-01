@@ -47,13 +47,43 @@ CREATE TABLE IF NOT EXISTS guilds (
 
 CREATE UNIQUE INDEX IF NOT EXISTS guild_id_idx ON guilds (guild_id);
 
-CREATE TABLE chats (
+CREATE TABLE IF NOT EXISTS chats (
   id BIGSERIAL PRIMARY KEY,
   guild_id VARCHAR(255),
   member_id VARCHAR(255),
   channel_id VARCHAR(255),
-  CONSTRAINT fk_guilds
+  CONSTRAINT fk_chats_guild
     FOREIGN KEY (guild_id)
       REFERENCES guilds(guild_id)
 );
 
+CREATE TABLE IF NOT EXISTS guild_moderators (
+  id BIGSERIAL PRIMARY KEY,
+  guild_id VARCHAR(255),
+  role_id VARCHAR(255),
+  CONSTRAINT fk_guild_moderator_guild
+    FOREIGN KEY (guild_id)
+      REFERENCES guilds(guild_id)
+);
+
+-- Function to add guild setup.
+CREATE OR REPLACE FUNCTION create_guild_data (
+  guild_id VARCHAR(255),
+  category_id VARCHAR(255),
+) RETURNS VOID AS $$
+BEGIN
+  INSERT INTO guilds (guild_id, category_id)
+  VALUES (guild_id, category_id);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to add guild moderator role.
+CREATE OR REPLACE FUNCTION create_guild_moderator (
+  guild_id VARCHAR(255),
+  role_id VARCHAR(255)
+) RETURNS VOID AS $$
+BEGIN
+  INSERT INTO guild_moderators (guild_id, role_id)
+  VALUES (guild_id, role_id);
+END;
+$$ LANGUAGE plpgsql;

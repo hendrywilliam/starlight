@@ -1,14 +1,14 @@
 import { logger } from "./src/lib/logger";
 import { supabase } from "./src/lib/supabase";
 import { Discord } from "./src/discord/discord";
-import { RAGModule } from "./src/modules/ai/rag";
+import { RAGModule } from "./src/modules/rag";
 import { CacheModule } from "./src/modules/cache";
 import { embedding } from "./src/lib/embeddings";
 import { redisVectorStore } from "./src/lib/vector-store";
 import { textSplitter } from "./src/lib/text-splitter";
 import { supabaseVectorStore } from "./src/lib/vector-store";
 import { CacheRedisAdapter, redisClient } from "./src/lib/redis";
-import { KnowledgeBaseModule } from "./src/modules/ai/knowledge-completion";
+import { KnowledgeBaseModule } from "./src/modules/knowledge-completion";
 import { PermissionManagerModule } from "./src/modules/permission-manager";
 
 async function main() {
@@ -37,9 +37,8 @@ async function main() {
       "permission",
       new PermissionManagerModule({
         privilegedCommands: process.env.PRIVILEGED_COMMANDS?.split(",") || [],
-        privilegedRoles: process.env.ALLOWED_MEMBER_ROLE_ID?.split(",") || [],
         allowedChannels: process.env.ALLOWED_CHANNELS_ID?.split(",") || [],
-        chatChannels: process.env.CHAT_AI_CHANNEL?.split(",") || [],
+        ownerCommands: process.env.OWNER_COMMANDS?.split(",") || [],
       })
     )
     .addModule(

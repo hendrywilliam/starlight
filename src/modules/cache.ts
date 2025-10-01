@@ -4,6 +4,7 @@ import type { Document, DocumentInterface } from "@langchain/core/documents";
 
 export const GUILD_DATA_PREFIX = "guild:";
 export const CHAT_DATA_PREFIX = "chat:";
+export const ROLES_PREFIX = "roles:";
 export const VECTOR_QUERY_PREFIX = "vector_query:";
 export const VECTOR_RESULT_PREFIX = "vector_result:";
 

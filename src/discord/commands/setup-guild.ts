@@ -4,7 +4,7 @@ import {
   type CacheType,
 } from "discord.js";
 import type { GuildData, Module } from "../types/discord";
-import type { RAGModule } from "../../modules/ai/rag";
+import type { RAGModule } from "../../modules/rag";
 import type { CommandLogger } from "../types/command";
 
 export default {
@@ -15,7 +15,7 @@ export default {
       option
         .setName("category_id")
         .setDescription(
-          "Specify a Category Channel ID to host AI chats for every player."
+          "Privileged command. Specify a Category Channel ID to host AI chats for every player."
         )
         .setRequired(false);
       return option;
@@ -36,10 +36,10 @@ export default {
       .limit(1)
       .eq("guild_id", interaction.guildId);
     if (error) throw error;
-    const guildData: GuildData = data[0];
+    const guildData: GuildData = data.length > 0 ? data[0] : undefined;
     if (!guildData) {
       const categoryId = interaction.options.getString("category_id");
-      const { error } = await rag.db.from("guilds").insert({
+      const { error } = await rag.db.rpc("create_guild_data", {
         guild_id: interaction.guildId,
         category_id: categoryId,
       });

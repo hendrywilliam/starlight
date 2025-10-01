@@ -6,9 +6,9 @@ import {
   type CacheType,
 } from "discord.js";
 import { InteractionContextType } from "discord.js";
-import type { RAGModule } from "../../modules/ai/rag";
+import type { RAGModule } from "../../modules/rag";
 import type { GuildData, Module, ChatData } from "../types/discord";
-import { KnowledgeBaseModule } from "../../modules/ai/knowledge-completion";
+import { KnowledgeBaseModule } from "../../modules/knowledge-completion";
 import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
 import { GUILD_DATA_PREFIX } from "../../modules/cache";
 import type { CommandLogger } from "../types/command";
@@ -35,8 +35,6 @@ export default {
     await interaction.reply("Beep boop beep boop, let me think...");
     const question = interaction.options.getString("question") as string;
     const member = interaction.member as GuildMember;
-    logger.info(`${member.displayName}:${member.id} used ask command.`);
-
     const kbModule = module.get("kb") as KnowledgeBaseModule;
     const rag = module.get("rag") as RAGModule;
     const cache = module.get("cache") as CacheModule;
@@ -61,7 +59,8 @@ export default {
         question,
         kbModule,
         rag,
-        cache
+        cache,
+        logger
       );
     }
     return await this.sendToExistingChat(
@@ -69,7 +68,8 @@ export default {
       chatData,
       question,
       kbModule,
-      cache
+      cache,
+      logger
     );
   },
   async getGuildData(
@@ -136,7 +136,8 @@ export default {
     question: string,
     kbModule: KnowledgeBaseModule,
     rag: RAGModule,
-    cache: CacheModule
+    cache: CacheModule,
+    logger: CommandLogger
   ): Promise<void> {
     try {
       const textChannel = await interaction.guild?.channels.create({
@@ -157,8 +158,10 @@ export default {
           },
         ],
       });
-      if (!textChannel) throw new Error("Unable to create a new text channel.");
-
+      if (!textChannel) {
+        logger.error("unable to create a new text channel");
+        throw new Error("Unable to create a new text channel.");
+      }
       const retrievedData = await kbModule.retrieve({
         question: question,
       });
@@ -167,6 +170,7 @@ export default {
         question,
         answer: "",
       });
+      await interaction.deleteReply();
       await textChannel.send({
         content: `<@${interaction.user.id}> ${result?.answer}`,
       });
@@ -185,6 +189,9 @@ export default {
       );
       return;
     } catch (error) {
+      logger.error(
+        error instanceof Error ? error.message : "Something went wrong."
+      );
       throw error;
     }
   },
@@ -193,48 +200,55 @@ export default {
     chatData: ChatData,
     question: string,
     kbModule: KnowledgeBaseModule,
-    cache: CacheModule
-  ): Promise<void> {
-    const channel = await interaction.client.channels.fetch(
-      chatData.channel_id
-    );
-    if (!channel) throw new Error("Failed to get member's chat channel.");
-    if (!channel.isSendable()) throw new Error("Channel is not sendable.");
-    let retrievedData: DocumentInterface[];
-    let result: { answer: MessageContent } | undefined;
-    const cachedVectorData: [[Document, number]] = await cache.similaritySearch(
-      question
-    );
-    if (cachedVectorData && cachedVectorData.length > 0) {
-      result = await kbModule.generate({
-        context: cachedVectorData.map((item: [Document, number]) => {
-          return item[0];
-        }),
-        question,
-        answer: "",
-      });
-    } else {
-      retrievedData = (
-        await kbModule.retrieve({
-          question: question,
-        })
-      ).context;
-      result = await kbModule.generate({
-        context: retrievedData,
-        question,
-        answer: "",
-      });
-      await cache.addDocuments(retrievedData);
-    }
-    if (interaction.channelId !== chatData.channel_id) {
-      await interaction.deleteReply();
-      await channel.send({
-        content: `<@${interaction.user.id}> ${result?.answer}`,
-      });
-    } else {
-      await interaction.editReply({
-        content: `<@${interaction.user.id}>  ${result?.answer}`,
-      });
+    cache: CacheModule,
+    logger: CommandLogger
+  ): Promise<any> {
+    try {
+      const channel = await interaction.client.channels.fetch(
+        chatData.channel_id
+      );
+      if (!channel) throw new Error("Failed to get member's chat channel.");
+      if (!channel.isSendable()) throw new Error("Channel is not sendable.");
+      let retrievedData: DocumentInterface[];
+      let result: { answer: MessageContent } | undefined;
+      const cachedVectorData: [[Document, number]] =
+        await cache.similaritySearch(question);
+      if (cachedVectorData && cachedVectorData.length > 0) {
+        result = await kbModule.generate({
+          context: cachedVectorData.map((item: [Document, number]) => {
+            return item[0];
+          }),
+          question,
+          answer: "",
+        });
+      } else {
+        retrievedData = (
+          await kbModule.retrieve({
+            question: question,
+          })
+        ).context;
+        result = await kbModule.generate({
+          context: retrievedData,
+          question,
+          answer: "",
+        });
+        await cache.addDocuments(retrievedData);
+      }
+      if (interaction.channelId !== chatData.channel_id) {
+        await interaction.deleteReply();
+        return await channel.send({
+          content: `<@${interaction.user.id}> ${result?.answer}`,
+        });
+      } else {
+        return await interaction.editReply({
+          content: `<@${interaction.user.id}>  ${result?.answer}`,
+        });
+      }
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error.message : "Something went wrong."
+      );
+      throw error;
     }
   },
 };

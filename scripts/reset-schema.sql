@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS guild_moderators;
 DROP TABLE IF EXISTS documents;
 DROP TABLE IF EXISTS guilds;
 
