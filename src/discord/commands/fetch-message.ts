@@ -11,12 +11,12 @@ export default {
   data: new SlashCommandBuilder()
     .setName("fetch")
     .setDescription(
-      "Privileged command. Fetch a message and feed it to database."
+      "Privileged command. Fetch a message/messages and store it to database."
     )
     .addChannelOption((option) => {
       option
         .setName("channel")
-        .setDescription("Channel as the parent of message.")
+        .setDescription("The channel where the message(s) is located.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
         .addChannelTypes(ChannelType.GuildText)
@@ -26,7 +26,7 @@ export default {
     .addStringOption((option) => {
       option
         .setName("message_id")
-        .setDescription("Message ID as source of truth.")
+        .setDescription("Message IDs to fetch.")
         .setRequired(true);
       return option;
     }),
@@ -37,7 +37,7 @@ export default {
     await interaction.reply(
       "Beep boop beep boop. Fetching selected message..."
     );
-    const messageId = interaction.options.getString("source") as string;
+    const messageIds = interaction.options.getString("source") as string;
     const channel = interaction.options.getChannel("channel");
     if (!channel) throw new Error("Failed to fetch channel data.");
     const actualChannel = await interaction.client.channels.fetch(channel.id);
@@ -47,21 +47,30 @@ export default {
         "You have selected the wrong type of channel. Fetch only accept a thread/text based channel."
       );
     }
-    const message = await actualChannel.messages.fetch(messageId);
-    if (!message) {
-      throw new Error("Selected message is not found.");
-    }
+    const messages = (
+      await Promise.all(
+        messageIds.split(",").map((id) => {
+          return actualChannel.messages.fetch(id);
+        })
+      )
+    ).filter(Boolean);
     const ragModule = module.get("rag") as RAGModule | undefined;
     if (!ragModule) throw new Error("Failed to get dependency module.");
-    const contents = await ragModule.splitText(message.content);
+    const contents = await ragModule.splitText(
+      messages
+        .map((message) => {
+          return message.content;
+        })
+        .join("")
+    );
     const rows = await Promise.all(
       contents.map(async (item, index) => {
         const vectorFromQuery = await ragModule.embedQuery(item);
         return {
           content: item,
           metadata: {
-            id: `${message.id}_chunk_${index}`,
-            parent_id: message.id,
+            id: `${messages[0]?.id}_chunk_${index}`,
+            parent_id: messages[0]?.id || "",
             channel_id: actualChannel.id,
           } satisfies DocumentChunkMetadata,
           embedding: vectorFromQuery,
@@ -69,43 +78,45 @@ export default {
       })
     );
     // Get attachments.
-    for (const attachment of message.attachments.values()) {
-      const mimeType = attachment.contentType
-        ? attachment.contentType.split(";")[0]
-        : "";
-      if (mimeType === "text/plain") {
-        try {
-          const response = await fetch(attachment.url, {
-            method: "GET",
-          });
-          const textContent = await response.text();
-          const attachmentContents = await ragModule.splitText(textContent);
-          const attachmentRows = await Promise.all(
-            attachmentContents.map(async (item, index) => {
-              const vectorFromQuery = await ragModule.embedQuery(item);
-              return {
-                content: item,
-                metadata: {
-                  channel_id: actualChannel.id,
-                  id: `${message.id}_chunk_${index}`,
-                  parent_id: message.id,
-                  is_attachment: true,
-                  attachment_id: attachment.id,
-                  attachment_name: attachment.name,
-                } satisfies DocumentChunkMetadata,
-                embedding: vectorFromQuery,
-              };
-            })
-          );
-          rows.push(...attachmentRows);
-        } catch (error) {
-          console.error(
-            `Error while processing thread/message attachments ${attachment.id}: `,
-            error
-          );
+    for (const message of messages) {
+      for (const attachment of message.attachments.values()) {
+        const mimeType = attachment.contentType
+          ? attachment.contentType.split(";")[0]
+          : "";
+        if (mimeType === "text/plain") {
+          try {
+            const response = await fetch(attachment.url, {
+              method: "GET",
+            });
+            const textContent = await response.text();
+            const attachmentContents = await ragModule.splitText(textContent);
+            const attachmentRows = await Promise.all(
+              attachmentContents.map(async (item, index) => {
+                const vectorFromQuery = await ragModule.embedQuery(item);
+                return {
+                  content: item,
+                  metadata: {
+                    channel_id: actualChannel.id,
+                    id: `${message.id}_chunk_${index}`,
+                    parent_id: message.id,
+                    is_attachment: true,
+                    attachment_id: attachment.id,
+                    attachment_name: attachment.name,
+                  } satisfies DocumentChunkMetadata,
+                  embedding: vectorFromQuery,
+                };
+              })
+            );
+            rows.push(...attachmentRows);
+          } catch (error) {
+            console.error(
+              `Error while processing thread/message attachments ${attachment.id}: `,
+              error
+            );
+          }
         }
+        continue;
       }
-      continue;
     }
     await ragModule.db.from("documents").insert(rows);
     await interaction.editReply("Fetch message succeded.");
