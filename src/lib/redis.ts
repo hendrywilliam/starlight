@@ -1,5 +1,9 @@
 import { createClient } from "redis";
-import type { CacheClient, CacheOptions } from "../modules/cache";
+import type {
+  AddDocumentOptions,
+  CacheClient,
+  CacheOptions,
+} from "../modules/cache";
 
 import type { VectorStore } from "@langchain/core/vectorstores";
 import type { DocumentInterface } from "@langchain/core/documents";
@@ -42,8 +46,11 @@ export class CacheRedisAdapter implements CacheClient {
     return await this.client.expire(key, duration);
   }
 
-  public async addDocuments(docs: DocumentInterface[]): Promise<any> {
-    return await this.vectorStore.addDocuments(docs);
+  public async addDocuments(
+    docs: DocumentInterface[],
+    options?: AddDocumentOptions
+  ): Promise<any> {
+    return await this.vectorStore.addDocuments(docs, options);
   }
 
   public async similaritySearch(query: string): Promise<any> {

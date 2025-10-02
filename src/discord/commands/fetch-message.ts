@@ -43,7 +43,7 @@ export default {
     const actualChannel = await interaction.client.channels.fetch(channel.id);
     if (!actualChannel) throw new Error("Failed to get channel data.");
     if (!actualChannel.isThread() && !actualChannel.isTextBased()) {
-      throw new Error(
+      return await interaction.editReply(
         "You have selected the wrong type of channel. Fetch only accept a thread/text based channel."
       );
     }

@@ -220,12 +220,19 @@ export default {
         channel_id: textChannel.id,
       });
       await cache.addDocuments(
-        retrievedData.context.map((data) => {
-          return {
-            pageContent: data.pageContent,
-            metadata: {},
-          };
-        })
+        retrievedData.context.map(
+          (data) => {
+            return {
+              pageContent: data.pageContent,
+              metadata: {},
+            };
+          },
+          {
+            keys: retrievedData.context.map((item) => {
+              return `document:${item.metadata.id}`;
+            }),
+          }
+        )
       );
       return;
     } catch (error) {
@@ -272,7 +279,11 @@ export default {
           question,
           answer: "",
         });
-        await cache.addDocuments(retrievedData);
+        await cache.addDocuments(retrievedData, {
+          keys: retrievedData.map((item) => {
+            return `document:${item.metadata.id}`;
+          }),
+        });
       }
       if (interaction.channelId !== chatData.channel_id) {
         await interaction.deleteReply();

@@ -15,6 +15,11 @@ export type CacheOptions = {
   XX?: boolean; // Only set if key exists.
 };
 
+export interface AddDocumentOptions {
+  keys?: string[];
+  batchSize?: number;
+}
+
 export interface CacheClient {
   get: (key: string) => Promise<string | null>;
   set: (
@@ -23,7 +28,10 @@ export interface CacheClient {
     options?: CacheOptions
   ) => Promise<string | null>;
   del: (key: string) => Promise<number>;
-  addDocuments: (docs: Document[]) => Promise<any>;
+  addDocuments: (
+    docs: Document[],
+    options?: AddDocumentOptions
+  ) => Promise<any>;
   similaritySearch: (query: string) => Promise<any>;
 }
 
@@ -46,8 +54,11 @@ export class CacheModule implements Module {
     return await this.client.del(key);
   }
 
-  public async addDocuments(docs: DocumentInterface[]) {
-    return await this.client.addDocuments(docs);
+  public async addDocuments(
+    docs: DocumentInterface[],
+    options?: AddDocumentOptions
+  ) {
+    return await this.client.addDocuments(docs, options);
   }
 
   public async similaritySearch(query: string) {
