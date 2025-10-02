@@ -9,7 +9,11 @@ import { InteractionContextType } from "discord.js";
 import type { RAGModule } from "../../modules/rag";
 import type { GuildData, Module, ChatData } from "../types/discord";
 import { KnowledgeBaseModule } from "../../modules/knowledge-completion";
-import { CacheModule, CHAT_DATA_PREFIX } from "../../modules/cache";
+import {
+  CacheModule,
+  CHAT_DATA_PREFIX,
+  ROLES_PREFIX,
+} from "../../modules/cache";
 import { GUILD_DATA_PREFIX } from "../../modules/cache";
 import type { CommandLogger } from "../types/command";
 import type { DocumentInterface, Document } from "@langchain/core/documents";
@@ -140,6 +144,38 @@ export default {
     logger: CommandLogger
   ): Promise<void> {
     try {
+      const moderatorCachedData = await cache.get(
+        `${ROLES_PREFIX}${interaction.guildId}`
+      );
+      let moderatorData: string[];
+      if (!moderatorCachedData) {
+        const { data, error } = await rag.db
+          .from("guild_moderators")
+          .select()
+          .match({
+            guild_id: interaction.guildId,
+          });
+        if (error) throw new Error("Failed to get guild moderators data.");
+        moderatorData =
+          data && data.length > 0
+            ? data.map((row) => {
+                return row.role_id;
+              })
+            : [];
+        if (moderatorData.length > 0) {
+          await cache.set(
+            `${ROLES_PREFIX}${interaction.guildId}`,
+            moderatorData.join(",")
+          );
+        }
+      } else {
+        try {
+          moderatorData = JSON.parse(moderatorCachedData);
+        } catch (error) {
+          moderatorData = [];
+        }
+      }
+      console.log("modData", moderatorData);
       const textChannel = await interaction.guild?.channels.create({
         name: `chat-${interaction.user.displayName}`,
         parent: guildData.category_id,
@@ -156,6 +192,14 @@ export default {
             id: interaction.client.user.id,
             allow: [PermissionFlagsBits.ViewChannel],
           },
+          ...(moderatorData
+            ? moderatorData.map((id) => {
+                return {
+                  id,
+                  allow: [PermissionFlagsBits.ViewChannel],
+                };
+              })
+            : []),
         ],
       });
       if (!textChannel) {

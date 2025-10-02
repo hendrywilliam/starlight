@@ -1,4 +1,5 @@
 import {
+  ChannelType,
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   type CacheType,
@@ -17,7 +18,7 @@ export default {
         .setDescription(
           "Privileged command. Specify a Category Channel ID to host AI chats for every player."
         )
-        .setRequired(false);
+        .setRequired(true);
       return option;
     }),
   async execute(
@@ -39,17 +40,26 @@ export default {
     const guildData: GuildData = data.length > 0 ? data[0] : undefined;
     if (!guildData) {
       const categoryId = interaction.options.getString("category_id");
-      const { error } = await rag.db.rpc("create_guild_data", {
-        guild_id: interaction.guildId,
-        category_id: categoryId,
-      });
-      if (error) throw error;
-      return await interaction.editReply(
-        "You have finished initial setup for this guild."
+      const categoryChan = await interaction.client.channels.fetch(
+        categoryId as string
       );
+      if (categoryChan && categoryChan.type === ChannelType.GuildCategory) {
+        const { error } = await rag.db.rpc("create_guild_data", {
+          guild_id: interaction.guildId,
+          category_id: categoryId,
+        });
+        if (error) throw error;
+        return await interaction.editReply(
+          "You have finished initial setup for this guild."
+        );
+      } else {
+        return await interaction.editReply(
+          "You have selected a wrong type of channel. **Expected:** `Category` channel."
+        );
+      }
     }
     return await interaction.editReply(
-      "You have finished initial setup for this guild. Please use `update` command to update the guild information."
+      "You have finished initial setup for this guild. **Please use `update` command to update the guild information.**"
     );
   },
 };

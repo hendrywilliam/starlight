@@ -4,8 +4,8 @@ import {
   SlashCommandBuilder,
   type CacheType,
 } from "discord.js";
-import type { DocumentChunkMetadata, Module } from "../types/discord";
 import type { RAGModule } from "../../modules/rag";
+import type { DocumentChunkMetadata, Module } from "../types/discord";
 
 export default {
   data: new SlashCommandBuilder()
@@ -16,9 +16,10 @@ export default {
     .addChannelOption((option) => {
       option
         .setName("channel")
-        .setDescription("Message as source of truth.")
+        .setDescription("Thread channel as the parent of message.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
+        .addChannelTypes(ChannelType.GuildText)
         .setRequired(true);
       return option;
     })
@@ -33,17 +34,17 @@ export default {
     interaction: ChatInputCommandInteraction<CacheType>,
     module: Map<string, Module>
   ) {
-    await interaction.reply("Beep boop beep boop. Fetching selected thread...");
+    await interaction.reply(
+      "Beep boop beep boop. Fetching selected message..."
+    );
     const messageId = interaction.options.getString("source") as string;
     const channel = interaction.options.getChannel("channel");
     if (!channel) throw new Error("Failed to fetch channel data.");
-
     const actualChannel = await interaction.client.channels.fetch(channel.id);
     if (!actualChannel) throw new Error("Failed to get channel data.");
-
-    if (!actualChannel.isThread()) {
+    if (!actualChannel.isThread() || !actualChannel.isTextBased()) {
       throw new Error(
-        "You have selected the wrong type of channel. Fetch only accept a thread."
+        "You have selected the wrong type of channel. Fetch only accept a thread/text based channel."
       );
     }
     const message = await actualChannel.messages.fetch(messageId);
