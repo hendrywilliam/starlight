@@ -170,7 +170,7 @@ export default {
         }
       } else {
         try {
-          moderatorData = JSON.parse(moderatorCachedData);
+          moderatorData = moderatorCachedData.split(",");
         } catch (error) {
           moderatorData = [];
         }

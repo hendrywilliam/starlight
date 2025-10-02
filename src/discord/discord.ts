@@ -237,7 +237,7 @@ export class Discord {
         const moderatorCachedData = await cache.get(
           `${ROLES_PREFIX}${interaction.guildId}`
         );
-        let moderatorData;
+        let moderatorData: string[];
         if (!moderatorCachedData) {
           const { data, error } = await rag.db
             .from("guild_moderators")
@@ -261,7 +261,7 @@ export class Discord {
           }
         } else {
           try {
-            moderatorData = JSON.parse(moderatorCachedData);
+            moderatorData = moderatorCachedData.split(",");
           } catch (error) {
             moderatorData = [];
           }
