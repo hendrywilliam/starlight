@@ -16,7 +16,7 @@ export default {
     .addChannelOption((option) => {
       option
         .setName("channel")
-        .setDescription("Thread channel as the parent of message.")
+        .setDescription("Channel as the parent of message.")
         .addChannelTypes(ChannelType.PublicThread)
         .addChannelTypes(ChannelType.PrivateThread)
         .addChannelTypes(ChannelType.GuildText)
@@ -25,8 +25,8 @@ export default {
     })
     .addStringOption((option) => {
       option
-        .setName("source")
-        .setDescription("Message as source of truth.")
+        .setName("message_id")
+        .setDescription("Message ID as source of truth.")
         .setRequired(true);
       return option;
     }),
@@ -42,7 +42,7 @@ export default {
     if (!channel) throw new Error("Failed to fetch channel data.");
     const actualChannel = await interaction.client.channels.fetch(channel.id);
     if (!actualChannel) throw new Error("Failed to get channel data.");
-    if (!actualChannel.isThread() || !actualChannel.isTextBased()) {
+    if (!actualChannel.isThread() && !actualChannel.isTextBased()) {
       throw new Error(
         "You have selected the wrong type of channel. Fetch only accept a thread/text based channel."
       );

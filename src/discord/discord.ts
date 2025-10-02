@@ -260,11 +260,7 @@ export class Discord {
             );
           }
         } else {
-          try {
-            moderatorData = moderatorCachedData.split(",");
-          } catch (error) {
-            moderatorData = [];
-          }
+          moderatorData = moderatorCachedData.split(",");
         }
         if (
           !perm.hasPermission(

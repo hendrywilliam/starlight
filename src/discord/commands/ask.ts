@@ -169,13 +169,9 @@ export default {
           );
         }
       } else {
-        try {
-          moderatorData = moderatorCachedData.split(",");
-        } catch (error) {
-          moderatorData = [];
-        }
+        moderatorData = moderatorCachedData.split(",");
       }
-      console.log("modData", moderatorData);
+
       const textChannel = await interaction.guild?.channels.create({
         name: `chat-${interaction.user.displayName}`,
         parent: guildData.category_id,
