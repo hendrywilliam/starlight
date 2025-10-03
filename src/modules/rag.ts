@@ -5,21 +5,21 @@ import type { TextSplitter } from "langchain/text_splitter";
 import type { Document } from "langchain/document";
 import type { DocumentInterface } from "@langchain/core/documents";
 import { SupabaseClient } from "@supabase/supabase-js";
-import type { Logger } from "winston";
+import type { CommandLogger } from "../discord/types/command";
 
 export class RAGModule implements Module {
   private vectorStore: VectorStore;
   private embedding: Embeddings;
   private textSplitter: TextSplitter;
   public db: SupabaseClient;
-  public logger: Logger;
+  public logger: CommandLogger;
 
   constructor(
     embedding: Embeddings,
     vectorStore: VectorStore,
     textSplitter: TextSplitter,
     db: SupabaseClient,
-    logger: Logger
+    logger: CommandLogger
   ) {
     this.vectorStore = vectorStore;
     this.embedding = embedding;

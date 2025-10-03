@@ -37,7 +37,7 @@ export default {
     await interaction.reply(
       "Beep boop beep boop. Fetching selected message..."
     );
-    const messageIds = interaction.options.getString("source") as string;
+    const messageIds = interaction.options.getString("message_id") as string;
     const channel = interaction.options.getChannel("channel");
     if (!channel) throw new Error("Failed to fetch channel data.");
     const actualChannel = await interaction.client.channels.fetch(channel.id);

@@ -315,7 +315,7 @@ export class Discord {
       if ("data" in command && "execute" in command) {
         this.client.commands.set(command.data.name, command);
       } else {
-        console.log(
+        this.logger.error(
           `The command at ${commandPath} is missing required "data" or "execute" property.`
         );
       }
