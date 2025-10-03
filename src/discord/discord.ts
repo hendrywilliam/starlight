@@ -212,6 +212,10 @@ export class Discord {
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (interaction.isMessageComponent()) {
+        // Handle anything inside a command.
+        return;
+      }
       if (!interaction.isChatInputCommand()) {
         this.logger.error(
           `unexpected type of interaction, expected: ChatInputCommandInteraction, received: ${interaction.type}`

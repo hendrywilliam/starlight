@@ -40,12 +40,14 @@ async function main() {
           body: commands,
         });
 
-        /**
-         * Use this to register command to specific guild. Almost instant refresh.
-         * --------
-         * await rest.put(Routes.applicationGuildCommands(DISCORD_APP_CLIENT_ID, "1341572597271236618"),
-         * { body: commands });
-         */
+        // Use this to register command to specific guild. Almost instant refresh.
+        // await rest.put(
+        //   Routes.applicationGuildCommands(
+        //     DISCORD_APP_CLIENT_ID,
+        //     "1421468008232128545"
+        //   ),
+        //   { body: commands }
+        // );
 
         console.log(`Successfully reloaded application (/) commands.`);
         process.exit(0);
