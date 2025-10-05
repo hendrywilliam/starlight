@@ -72,6 +72,7 @@ export default {
       chatData,
       question,
       kbModule,
+      rag,
       cache,
       logger
     );
@@ -211,9 +212,20 @@ export default {
         answer: "",
       });
       await interaction.deleteReply();
-      await textChannel.send({
-        content: `<@${interaction.user.id}> ${result?.answer}`,
-      });
+      const splittedResults = await rag.responseSplitter.splitText(
+        result?.answer as string
+      );
+      await Promise.all(
+        splittedResults.map((result, index) => {
+          return index === 0
+            ? textChannel.send({
+                content: `<@${interaction.user.id}> ${result}`,
+              })
+            : textChannel.send({
+                content: result,
+              });
+        })
+      );
       await rag.db.from("chats").insert({
         guild_id: interaction.guildId,
         member_id: member.id,
@@ -247,6 +259,7 @@ export default {
     chatData: ChatData,
     question: string,
     kbModule: KnowledgeBaseModule,
+    rag: RAGModule,
     cache: CacheModule,
     logger: CommandLogger
   ): Promise<any> {
@@ -259,7 +272,7 @@ export default {
       let retrievedData: DocumentInterface[];
       let result: { answer: MessageContent } | undefined;
       const cachedVectorData: [[Document, number]] =
-        await cache.similaritySearch(question);
+        await cache.similaritySearch(question, 2);
       if (cachedVectorData && cachedVectorData.length > 0) {
         result = await kbModule.generate({
           context: cachedVectorData.map((item: [Document, number]) => {
@@ -285,15 +298,32 @@ export default {
           }),
         });
       }
+      const splittedResponses = await rag.responseSplitter.splitText(
+        result?.answer as string
+      );
       if (interaction.channelId !== chatData.channel_id) {
         await interaction.deleteReply();
-        return await channel.send({
-          content: `<@${interaction.user.id}> ${result?.answer}`,
-        });
+        await Promise.all(
+          splittedResponses.map((response, index) => {
+            return index === 0
+              ? channel.send({
+                  content: `<@${interaction.user.id}> ${response}`,
+                })
+              : channel.send({
+                  content: `${response}`,
+                });
+          })
+        );
       } else {
-        return await interaction.editReply({
-          content: `<@${interaction.user.id}>  ${result?.answer}`,
-        });
+        await Promise.all(
+          splittedResponses.map((response, index) => {
+            return index === 0
+              ? interaction.editReply(`<@${interaction.user.id}>  ${response}`)
+              : channel.send({
+                  content: `${response}`,
+                });
+          })
+        );
       }
     } catch (error) {
       logger.error(

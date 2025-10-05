@@ -5,7 +5,7 @@ import { RAGModule } from "./src/modules/rag";
 import { CacheModule } from "./src/modules/cache";
 import { embedding } from "./src/lib/embeddings";
 import { redisVectorStore } from "./src/lib/vector-store";
-import { textSplitter } from "./src/lib/text-splitter";
+import { responseSplitter, textSplitter } from "./src/lib/text-splitter";
 import { supabaseVectorStore } from "./src/lib/vector-store";
 import { CacheRedisAdapter, redisClient } from "./src/lib/redis";
 import { KnowledgeBaseModule } from "./src/modules/knowledge-completion";
@@ -29,6 +29,7 @@ async function main() {
         embedding,
         supabaseVectorStore,
         textSplitter,
+        responseSplitter,
         supabase,
         logger
       )

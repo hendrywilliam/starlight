@@ -32,7 +32,7 @@ export interface CacheClient {
     docs: Document[],
     options?: AddDocumentOptions
   ) => Promise<any>;
-  similaritySearch: (query: string) => Promise<any>;
+  similaritySearch: (query: string, k?: number) => Promise<any>;
 }
 
 export class CacheModule implements Module {
@@ -61,8 +61,8 @@ export class CacheModule implements Module {
     return await this.client.addDocuments(docs, options);
   }
 
-  public async similaritySearch(query: string) {
-    return await this.client.similaritySearch(query);
+  public async similaritySearch(query: string, k?: number) {
+    return await this.client.similaritySearch(query, k);
   }
 
   public execute(data: unknown, ...args: any[]) {

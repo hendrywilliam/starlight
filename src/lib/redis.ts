@@ -53,11 +53,11 @@ export class CacheRedisAdapter implements CacheClient {
     return await this.vectorStore.addDocuments(docs, options);
   }
 
-  public async similaritySearch(query: string): Promise<any> {
+  public async similaritySearch(query: string, k: number = 4): Promise<any> {
     const queryVector = await this.vectorStore.embeddings.embedQuery(query);
     return await this.vectorStore.similaritySearchVectorWithScore(
       queryVector,
-      4
+      k
     );
   }
 }

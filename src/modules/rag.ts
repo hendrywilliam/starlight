@@ -11,6 +11,7 @@ export class RAGModule implements Module {
   private vectorStore: VectorStore;
   private embedding: Embeddings;
   private textSplitter: TextSplitter;
+  public responseSplitter: TextSplitter;
   public db: SupabaseClient;
   public logger: CommandLogger;
 
@@ -18,6 +19,7 @@ export class RAGModule implements Module {
     embedding: Embeddings,
     vectorStore: VectorStore,
     textSplitter: TextSplitter,
+    responseSplitter: TextSplitter,
     db: SupabaseClient,
     logger: CommandLogger
   ) {
@@ -26,6 +28,7 @@ export class RAGModule implements Module {
     this.textSplitter = textSplitter;
     this.db = db;
     this.logger = logger;
+    this.responseSplitter = responseSplitter;
   }
 
   public async splitText(text: string) {
